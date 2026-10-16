@@ -60,6 +60,22 @@ describe('criarCheckoutMae', () => {
     expect(chamadas[0].corpo).toMatchObject({ subscription: { cycle: 'MONTHLY' } })
     expect(chamadas[0].corpo!.maxInstallmentCount).toBeUndefined()
   })
+  it('mensal no PIX AUTOMÁTICO (16/10): link de pagamento PIX recorrente MONTHLY com "MAEA:<ws>"; desligado → recusa', async () => {
+    respostaAsaas = () => ({ ok: true, dados: { id: 'lnk1', url: 'https://www.asaas.com/c/lnk1' } })
+    const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
+    const r = await criarCheckoutMae({ workspaceId: 'ws4', ciclo: 'mensal', baseUrl: 'https://x', metodo: 'pix' })
+    expect(r).toEqual({ ok: true, link: 'https://www.asaas.com/c/lnk1' })
+    expect(chamadas[0].caminho).toBe('/paymentLinks')
+    expect(chamadas[0].corpo).toMatchObject({ billingType: 'PIX', chargeType: 'RECURRENT', subscriptionCycle: 'MONTHLY', value: 39.9, externalReference: 'MAEA:ws4' })
+    expect(String(chamadas[0].corpo!.name).length).toBeLessThanOrEqual(30)
+    // anual nunca vai pelo link (o pix do anual é à vista, no checkout)
+    chamadas.length = 0
+    await criarCheckoutMae({ workspaceId: 'ws4', ciclo: 'anual', parcelas: 1, baseUrl: 'https://x', metodo: 'pix' })
+    expect(chamadas[0].caminho).toBe('/checkouts')
+    process.env.PIX_AUTO = 'off'
+    try { expect((await criarCheckoutMae({ workspaceId: 'ws4', ciclo: 'mensal', baseUrl: 'https://x', metodo: 'pix' })).ok).toBe(false) }
+    finally { delete process.env.PIX_AUTO }
+  })
   it('quem já testou começa pagando hoje (sem 2º trial)', async () => {
     linhaAssinatura = { status: 'CANCELADA', trialUsado: true, valor: 0, ciclo: 'mensal', parcelas: 1, plano: 'addon' }
     const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')

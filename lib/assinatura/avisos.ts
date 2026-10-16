@@ -172,7 +172,7 @@ ${ASSINATURA}`,
   },
 
   TRIAL_POS_D3: {
-    tipo: 'TRIAL_POS_D3', momento: '3 dias após o fim do teste (só Pix)', canal: 'email',
+    tipo: 'TRIAL_POS_D3', momento: '1 dia após o fim do teste (só Pix)', canal: 'email',
     variaveis: ['diasAteCorte'],
     objetivo: 'Lembrar sem culpar; abrir conversa para tirar dúvida de decisão.',
     assunto: '{{nome}}, seu ateliê está sentindo sua falta',
@@ -188,7 +188,7 @@ ${ASSINATURA}`,
   },
 
   TRIAL_POS_D6: {
-    tipo: 'TRIAL_POS_D6', momento: '6 dias após o fim — véspera do corte (só Pix)', canal: 'email',
+    tipo: 'TRIAL_POS_D6', momento: '3 dias após o fim — véspera do corte (só Pix)', canal: 'email',
     variaveis: [],
     objetivo: 'Último aviso. "Pausado", não "cancelado" — nada se perde.',
     assunto: 'Amanhã seu acesso será pausado, {{nome}}',
@@ -207,7 +207,7 @@ ${ASSINATURA}`,
 
   // ── Inadimplência (os dois métodos) ───────────────────────────────────────
   INAD_D0: {
-    tipo: 'INAD_D0', momento: 'no dia do vencimento não pago', canal: 'email',
+    tipo: 'INAD_D0', momento: 'no dia do vencimento não pago (só anual — a mensalidade usa a régua das mensalidades)', canal: 'email',
     variaveis: ['valor', 'vencimento'],
     objetivo: 'Assumir que pode ser problema do cartão, não descuido dela.',
     assunto: 'O pagamento da sua assinatura não entrou — deve ser coisa boba',
@@ -225,7 +225,7 @@ ${ASSINATURA}`,
   },
 
   INAD_D3: {
-    tipo: 'INAD_D3', momento: '3 dias após o vencimento', canal: 'email',
+    tipo: 'INAD_D3', momento: '1 dia após o vencimento (só anual)', canal: 'email',
     variaveis: ['valor', 'diasAteCorte'],
     objetivo: 'Facilitar a ação: link direto, sem burocracia.',
     assunto: '{{nome}}, faltam {{diasAteCorte}} dias para regularizar sua assinatura',
@@ -241,7 +241,7 @@ ${ASSINATURA}`,
   },
 
   INAD_D6: {
-    tipo: 'INAD_D6', momento: '6 dias após o vencimento — véspera do corte', canal: 'email',
+    tipo: 'INAD_D6', momento: '3 dias após o vencimento — véspera do corte (só anual)', canal: 'email',
     variaveis: ['valor'],
     objetivo: 'Último aviso, mesmo tom do trial: pausa, não perda.',
     assunto: 'Amanhã seu acesso será pausado — resolve em 1 minuto?',
@@ -294,7 +294,7 @@ ${ASSINATURA}`,
   // ── Corte ─────────────────────────────────────────────────────────────────
   // ── Cobrança contínua (15/10/2026): a cada 7 dias depois do D+6, até pagar ou cancelar ────────────────────
   COBRANCA_SEMANAL: {
-    tipo: 'COBRANCA_SEMANAL', momento: 'a cada 7 dias depois do D+6, enquanto a assinatura estiver viva e em atraso', canal: 'email',
+    tipo: 'COBRANCA_SEMANAL', momento: 'a cada 7 dias depois do D+6, enquanto a assinatura estiver viva e em atraso (só anual)', canal: 'email',
     variaveis: ['valor'],
     objetivo: 'Seguir cobrando, com respeito, até ela pagar ou cancelar — e mostrar que cancelar também é um caminho.',
     assunto: 'Sua assinatura do SOA continua em aberto',
@@ -339,7 +339,7 @@ ${ASSINATURA}`,
   },
 
   CORTE: {
-    tipo: 'CORTE', momento: 'no dia do corte (trial+7 ou vencimento+7)', canal: 'email',
+    tipo: 'CORTE', momento: 'no dia do corte (trial+3 ou vencimento+3; mensalidade: régua das mensalidades)', canal: 'email',
     variaveis: [],
     objetivo: 'Acolher e mostrar o caminho de volta. Dados intactos, um clique.',
     assunto: 'Seu acesso foi pausado — e voltar é simples 💛',

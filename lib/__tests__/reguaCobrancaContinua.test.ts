@@ -14,22 +14,31 @@ describe('cobrança contínua — Asaas', () => {
   it('o lembrete cai no D13, D20, D27… (a cada 7 dias depois do D6)', () => {
     expect([6, 7, 12, 13, 14, 20, 27, 34].map(diaDeLembrete)).toEqual([false, false, false, true, false, true, true, true])
   })
-  it('inadimplente: D0/D3/D6 como antes; o e-mail de pausa sai UMA vez (D8); depois, o lembrete semanal', () => {
-    expect(decidir(linha({ assinaturaExpira: diasAtras(3) }), HOJE).avisos).toEqual(['INAD_D3'])
-    const d8 = decidir(linha({ assinaturaExpira: diasAtras(8) }), HOJE)
-    expect(d8.avisos).toEqual(['CORTE']); expect(d8.cortar).toBe(true)
-    expect(decidir(linha({ assinaturaExpira: diasAtras(9) }), HOJE).avisos).toEqual([])      // não repete o "pausado" todo dia
-    expect(decidir(linha({ assinaturaExpira: diasAtras(13) }), HOJE).avisos).toEqual(['COBRANCA_SEMANAL'])
+  // sem a régua das mensalidades (REGUA_MENSAL=off) ou no ANUAL, os avisos de atraso saem daqui — carência de 3 dias (16/10)
+  it('inadimplente (régua antiga): D0/D1/D3; o e-mail de pausa sai UMA vez (D4); depois, o lembrete semanal', () => {
+    expect(decidir(linha({ assinaturaExpira: diasAtras(1) }), HOJE, false).avisos).toEqual(['INAD_D3'])
+    expect(decidir(linha({ assinaturaExpira: diasAtras(3) }), HOJE, false).avisos).toEqual(['INAD_D6'])
+    const d4 = decidir(linha({ assinaturaExpira: diasAtras(4) }), HOJE, false)
+    expect(d4.avisos).toEqual(['CORTE']); expect(d4.cortar).toBe(true)
+    expect(decidir(linha({ assinaturaExpira: diasAtras(5) }), HOJE, false).avisos).toEqual([])      // não repete o "pausado" todo dia
+    expect(decidir(linha({ assinaturaExpira: diasAtras(13) }), HOJE, false).avisos).toEqual(['COBRANCA_SEMANAL'])
+  })
+  it('MENSAL com a régua das mensalidades: nenhum e-mail daqui (não chega em dobro), mas o corte segue no D4', () => {
+    expect(decidir(linha({ assinaturaExpira: diasAtras(1) }), HOJE, true).avisos).toEqual([])
+    const d4 = decidir(linha({ assinaturaExpira: diasAtras(4) }), HOJE, true)
+    expect(d4.avisos).toEqual([]); expect(d4.cortar).toBe(true)
+    expect(decidir(linha({ assinaturaExpira: diasAtras(3) }), HOJE, true).cortar).toBe(false)
+    expect(decidir(linha({ assinaturaStatus: 'CORTADA', assinaturaExpira: diasAtras(20) }), HOJE, true).avisos).toEqual([])
   })
   it('já CORTADA com a assinatura viva: lembrete a cada 7 dias; cancelada (ou sem assinatura viva): para', () => {
-    expect(decidir(linha({ assinaturaStatus: 'CORTADA', assinaturaExpira: diasAtras(20) }), HOJE).avisos).toEqual(['COBRANCA_SEMANAL'])
-    expect(decidir(linha({ assinaturaStatus: 'CORTADA', assinaturaExpira: diasAtras(21) }), HOJE).avisos).toEqual([])
-    expect(decidir(linha({ assinaturaStatus: 'CORTADA', assinaturaExpira: diasAtras(20), assinaturaViva: false }), HOJE).avisos).toEqual([])
-    expect(decidir(linha({ assinaturaStatus: 'CANCELADA', assinaturaExpira: diasAtras(20) }), HOJE).avisos).toEqual([])
-    expect(decidir(linha({ assinaturaStatus: 'CORTADA', assinaturaExpira: diasAtras(20), liberacaoManual: true }), HOJE).avisos).toEqual([])
+    expect(decidir(linha({ assinaturaStatus: 'CORTADA', assinaturaExpira: diasAtras(20) }), HOJE, false).avisos).toEqual(['COBRANCA_SEMANAL'])
+    expect(decidir(linha({ assinaturaStatus: 'CORTADA', assinaturaExpira: diasAtras(21) }), HOJE, false).avisos).toEqual([])
+    expect(decidir(linha({ assinaturaStatus: 'CORTADA', assinaturaExpira: diasAtras(20), assinaturaViva: false }), HOJE, false).avisos).toEqual([])
+    expect(decidir(linha({ assinaturaStatus: 'CANCELADA', assinaturaExpira: diasAtras(20) }), HOJE, false).avisos).toEqual([])
+    expect(decidir(linha({ assinaturaStatus: 'CORTADA', assinaturaExpira: diasAtras(20), liberacaoManual: true }), HOJE, false).avisos).toEqual([])
   })
-  it('anual (corte vetado) continua recebendo o lembrete semanal', () => {
-    expect(decidir(linha({ assinaturaExpira: diasAtras(13), planoEscolhido: 'anual' }), HOJE).avisos).toEqual(['COBRANCA_SEMANAL'])
+  it('anual (corte vetado) continua recebendo o lembrete semanal, mesmo com a régua das mensalidades', () => {
+    expect(decidir(linha({ assinaturaExpira: diasAtras(13), planoEscolhido: 'anual' }), HOJE, true).avisos).toEqual(['COBRANCA_SEMANAL'])
   })
 })
 

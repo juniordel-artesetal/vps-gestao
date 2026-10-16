@@ -8,7 +8,7 @@ import { limparCpf, cpfValido } from '@/lib/assinatura/cpf'
 export const PESSOAL_VALOR = 5.90
 // PONTO ÚNICO da carência de inadimplência (dias após o vencimento em que o acesso
 // ainda vale antes de bloquear). Ajuste aqui e vale no gate inteiro.
-export const CARENCIA_DIAS = 5
+export const CARENCIA_DIAS = 3
 
 function gerarId() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 function hojeISO() { return new Date().toISOString().slice(0, 10) }

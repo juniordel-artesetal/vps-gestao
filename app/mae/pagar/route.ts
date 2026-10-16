@@ -1,5 +1,5 @@
 // usesoa.com.br/mae/pagar — o PREÇO clicado na página de vendas vai DIRETO para a página de pagamento do Asaas.
-//   ?o=soa-mae | so-mae | anual-soa   ·   &ciclo=mensal|anual   ·   &parcelas=1..12 (anual)
+//   ?o=soa-mae | so-mae | anual-soa   ·   &ciclo=mensal|anual   ·   &parcelas=1..12 (anual)   ·   &metodo=pix (mensal no Pix Automático)
 // Sem sessão: só-MAE → cadastro (e volta para cá depois); SOA + MAE e troca para o anual → login (e volta para cá).
 // Com sessão: abre o checkout certo (o mesmo das telas: sem cobrança dupla, link reaproveitado) e redireciona.
 // Qualquer coisa fora do esperado (venda ainda fechada, plano da conta diferente do clicado, assinatura já ativa)
@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
   const o = url.searchParams.get('o')
   const ciclo = url.searchParams.get('ciclo') === 'anual' ? 'anual' : 'mensal'
   const parcelas = Math.max(1, Math.min(12, Math.floor(Number(url.searchParams.get('parcelas')) || 1)))
-  const aqui = `/mae/pagar?o=${encodeURIComponent(o ?? '')}&ciclo=${ciclo}&parcelas=${parcelas}`
+  const metodo = ciclo === 'mensal' && url.searchParams.get('metodo') === 'pix' ? 'pix' : 'cartao'
+  const aqui = `/mae/pagar?o=${encodeURIComponent(o ?? '')}&ciclo=${ciclo}&parcelas=${parcelas}${metodo === 'pix' ? '&metodo=pix' : ''}`
   const ir = (p: string) => NextResponse.redirect(p.startsWith('http') ? p : new URL(p, url.origin))
   const tela = o === 'anual-soa' ? '/assinatura/migrar-anual' : `/mae/assinatura?ciclo=${ciclo}${ciclo === 'anual' && parcelas > 1 ? `&parcelas=${parcelas}` : ''}`
   if (o !== 'soa-mae' && o !== 'so-mae' && o !== 'anual-soa') return ir('/mae#planos')
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
     // anual PARCELADO: passa pela nossa tela, com a lista das parcelas e os juros de cada uma (e o aviso de escolher as
     // mesmas parcelas na página do Asaas, que abre em "1x")
     if (ciclo === 'anual' && parcelas > 1) return ir(tela)
-    const r = await criarCheckoutMae({ workspaceId: ws, ciclo, parcelas: ciclo === 'anual' ? parcelas : 1, baseUrl: url.origin })
+    const r = await criarCheckoutMae({ workspaceId: ws, ciclo, parcelas: ciclo === 'anual' ? parcelas : 1, baseUrl: url.origin, metodo })
     return ir(r.ok ? r.link : tela)
   } catch (e) {
     console.error('[MAE PAGAR]', e)

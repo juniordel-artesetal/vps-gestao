@@ -304,6 +304,7 @@ function Plano(p: {
           <Cta href={pagar(p.o, 'anual', 12)} botao={`preco-${p.o}-anual-12x`} className="mt-2 block text-sm font-bold text-[#c2410c] hover:underline">{p.rotulo12 ?? 'ou 12× de'} {brl(p.doze)} →</Cta>
         </div>
       </div>
+      <Cta href={`${pagar(p.o, 'mensal')}&metodo=pix`} botao={`preco-${p.o}-mensal-pix`} className="mt-3 block text-sm font-bold text-[#c2410c] hover:underline">Mensal sem cartão: no Pix Automático →</Cta>
       {p.composicao && <p className="mt-3 text-sm text-[#7a6a5f]">{p.composicao}</p>}
       <div className="mt-6 flex flex-1 flex-col justify-end gap-3">
         {p.botoes.map(b => (

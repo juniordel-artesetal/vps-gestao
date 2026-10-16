@@ -130,3 +130,45 @@ export async function aplicarStatusAutorizacao(authorizationId: string, novoStat
     `
   }
 }
+
+// ── PIX AUTOMÁTICO PELO LINK DE PAGAMENTO (16/10/2026 — ver ./linkPixAuto.ts) ─────────────────────────────────────────
+
+/** Conta dona de um link de Pix Automático do SOA (gravado como "plink:<id do link>"). */
+export async function workspaceDoLinkPixAuto(paymentLink: string | null | undefined): Promise<string | null> {
+  if (!paymentLink) return null
+  // sem DDL no caminho do webhook (a tabela nasce no 1º link criado); sem tabela = não é nosso
+  const [a] = await prisma.$queryRaw<{ workspaceId: string }[]>`
+    SELECT "workspaceId" FROM "AsaasPixAutoAutorizacao" WHERE "asaasAuthorizationId" = ${'plink:' + paymentLink} LIMIT 1`.catch(() => [])
+  return a?.workspaceId ?? null
+}
+
+/**
+ * O Pix Automático entrou no lugar de uma assinatura antiga (ex.: cartão recusado): encerra no Asaas as OUTRAS
+ * assinaturas vivas do SOA desta conta — senão ela seria cobrada em dobro quando o cartão voltasse a passar. Marca antes
+ * ("troca-pix-auto") para o SUBSCRIPTION_DELETED não cancelar a conta. Nada é cobrado nem estornado. Nunca lança.
+ */
+export async function encerrarAssinaturasTrocadasPorPixAuto(workspaceId: string, subNova: string): Promise<number> {
+  try {
+    const antigas = await prisma.$queryRaw<{ subscriptionId: string }[]>`
+      SELECT "subscriptionId" FROM "AsaasAssinatura"
+      WHERE "workspaceId" = ${workspaceId} AND "subscriptionId" <> ${subNova} AND "canceladaEm" IS NULL AND "status" IN ('ACTIVE','OVERDUE')`
+    let n = 0
+    for (const { subscriptionId } of antigas) {
+      await prisma.$executeRaw`
+        UPDATE "AsaasAssinatura" SET "status" = 'CANCELADA', "canceladaEm" = NOW(), "canceladaPor" = 'troca-pix-auto',
+          "canceladaMotivo" = 'trocada pelo Pix Automático', "updatedAt" = NOW() WHERE "subscriptionId" = ${subscriptionId}`
+      const r = await chamarAsaas(`/subscriptions/${subscriptionId}`, { metodo: 'DELETE' })
+      if (r.ok || r.status === 404) n++
+      else console.error(`[PIX AUTO] não consegui encerrar a assinatura antiga ${subscriptionId} ws=${workspaceId}: ${r.erro}`)
+    }
+    if (n) console.log(`[PIX AUTO] ws=${workspaceId}: ${n} assinatura(s) antiga(s) encerrada(s) — trocadas pelo Pix Automático`)
+    return n
+  } catch (e) { console.error('[PIX AUTO] encerrar antigas:', (e as Error).message); return 0 }
+}
+
+/** SUBSCRIPTION_DELETED de uma assinatura trocada pelo Pix Automático: é nossa — a conta NÃO vira CANCELADA. */
+export async function ehAssinaturaTrocadaPorPixAuto(sub: string): Promise<boolean> {
+  const [a] = await prisma.$queryRaw<{ ok: number }[]>`
+    SELECT 1 AS ok FROM "AsaasAssinatura" WHERE "subscriptionId" = ${sub} AND "canceladaPor" = 'troca-pix-auto' LIMIT 1`.catch(() => [])
+  return !!a
+}

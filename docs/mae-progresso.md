@@ -4,7 +4,7 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 
 ## Situação atual — 15/10/2026
 
-**Tudo o que foi pedido até o Lote 19 está em produção** (www.usesoa.com.br, deploy `dpl_H8iisexj4NijyGjoY8gA5YPYocXS`, commit `e10866d`).
+**Tudo o que foi pedido até o Lote 21 (248–253) está em produção** (www.usesoa.com.br, deploy `dpl_FPqyrjCK8QWmzMLzyMNQm2LWc6Fy`, commit `4dc03e2`).
 
 | Lote | Itens | Situação | Commit |
 | --- | --- | --- | --- |
@@ -29,6 +29,8 @@ Atualizado pelo Claude Code ao fim de cada sprint: o que foi feito, decisões t�
 | Lote 17 | 213, 214 (P2: cor por letra + letras brincando, enfeite preso ao nome) | no ar | `bc0220b` |
 | Lote 18 | 215–230 (P0: texto do tema só no tema + limpar repetidos + recorte na peça, salvar/abrir confiáveis, arte pronta por pedido no lote · P1/P2: temas seguem a base, peças por unidade do pedido, base sem produto, laço sobre a arte pronta, impresso, dividir pedido, marcas, mover/lixeira de bases, busca de bases, Biblioteca, MR v3, faces sem papel) | no ar | `f8c1096`, `6dfec0c` |
 | Lote 19 | 231–245 (P0: o lote sai idêntico ao gerar sozinho · P1: limpar repetidos em 2 colunas + desfazer, aviso único de versão, ajuste da marca em mm, PDF por tipo pela base, dois nomes no mesmo pedido, impresso com aviso, aviso diz a caixa, página→caixa no tema pronto, nome e idade juntos, versão sem nome, repetido só no mesmo lugar, recuperar ajustes, tema sem nome no lote · P2: corte com faca) | no ar | `e10866d` |
+| Lote 20 | 247 (página de vendas `usesoa.com.br/mae` + troca do SOA mensal → anual + preços clicáveis); 246 (Central de Ajuda) pendente | no ar | `7ea5652`, `5a93a59` |
+| Lote 21 | 248–253 (sub-abas no Texto, travar pelo botão direito, Shift nas partes, brilho interno, acento falso, transição com cor/elemento); 254–256 só plano | no ar | `4dc03e2` |
 
 **Próximo passo:** a Naty gerar de novo o lote Antonella (Moana) + Antonny (Pooh) e conferir que o corpo sai igual ao gerado sozinho (231). Depois, retestar o Lote 19 (2 nomes no mesmo pedido, "Tirar o texto repetido" em 2 colunas, tema sem nome no lote, corte com faca) e o que faltou do Lote 18 (218–230).
 
@@ -3612,3 +3614,4 @@ O doc está em `docs/mae-ajustes-lote-21.md`. **Decisão do Júnior:** fazer 248
 - **"Montar acentos" com a fonte completa:** fica recolhido em "Montar acentos (opcional)", só com o "Montar sempre". O seletor de fonte dos acentos só aparece quando falta letra ou já há configuração.
 - **O teste de tempo "papel na FRENTE < 0,3 s"** falhou às vezes com a máquina ocupada (build e harnesses ao mesmo tempo). Medido sozinho, dá 85–127 ms com e sem o Lote 21.
 
+**Publicado:** 16/10/2026, commit `4dc03e2` (um único push), deploy `dpl_FPqyrjCK8QWmzMLzyMNQm2LWc6Fy` (Ready). Conferido: `www.usesoa.com.br/api/versao`. A página `/mae` segue ok em produção.

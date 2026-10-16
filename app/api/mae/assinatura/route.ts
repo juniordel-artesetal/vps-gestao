@@ -1,5 +1,6 @@
 // Método MAE — ASSINATURA (add-on do SOA ou standalone). GET: preços da config, plano da conta, tabela do anual
-// (1–12×), economia, estado da assinatura e do acesso. POST { ciclo, parcelas }: abre o checkout do Asaas (só
+// (1–12×), economia, estado da assinatura e do acesso. POST { ciclo, parcelas, metodo }: abre o checkout do Asaas (mensal
+// no metodo 'pix' = link do Pix Automático) (só
 // ADMIN; sem cobrança dupla). Com a venda fechada (MAE_VENDA_ATIVO ≠ on ou preço faltando) tudo responde "em breve".
 import { recusa } from '@/lib/mae/servidor/acesso'
 import { NextRequest, NextResponse } from 'next/server'
@@ -9,6 +10,7 @@ import { precosMae, vendaMaeAtiva, tabelaAnualMae, economiaAnual, TRIAL_DIAS_MAE
 import { estadoMaeDaConta, assinaturaMaeDaConta, criarCheckoutMae, planoDeVenda } from '@/lib/mae/assinatura/servidor'
 import { addonsDaConta } from '@/lib/mae/servidor/addons'
 import { janelaPopupMae } from '@/lib/mae/assinatura/lancamento'
+import { pixAutoLigado } from '@/lib/pagamento/asaas/linkPixAuto'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +25,7 @@ export async function GET() {
     const soaInativo = plano === 'standalone' && estado.plano !== 'standalone'
     const p = precosMae()
     return NextResponse.json({
-      venda: vendaMaeAtiva(), plano, trialDias: TRIAL_DIAS_MAE,
+      venda: vendaMaeAtiva(), plano, trialDias: TRIAL_DIAS_MAE, pixAuto: pixAutoLigado(),
       precos: p ? p[plano] : null,
       parcelamentoAnual: p ? tabelaAnualMae(p, plano) : [],
       economiaAnual: p ? economiaAnual(p, plano) : null,
@@ -44,11 +46,11 @@ export async function POST(req: NextRequest) {
   const ws = session?.user.workspaceId
   if (!ws) return recusa('assinatura', { error: 'Não autenticado' }, 401)
   if (session.user.role !== 'ADMIN') return recusa('assinatura', { error: 'Só a administradora da conta assina o Método Mãe' }, 403)
-  const b = await req.json().catch(() => ({})) as { ciclo?: unknown; parcelas?: unknown }
+  const b = await req.json().catch(() => ({})) as { ciclo?: unknown; parcelas?: unknown; metodo?: unknown }
   const ciclo = b.ciclo === 'anual' ? 'anual' : b.ciclo === 'mensal' ? 'mensal' : null
   if (!ciclo) return recusa('assinatura', { error: 'Escolha mensal ou anual' }, 400)
   try {
-    const r = await criarCheckoutMae({ workspaceId: ws, ciclo, parcelas: Number(b.parcelas) || 1, baseUrl: new URL(req.url).origin })
+    const r = await criarCheckoutMae({ workspaceId: ws, ciclo, parcelas: Number(b.parcelas) || 1, baseUrl: new URL(req.url).origin, metodo: b.metodo === 'pix' ? 'pix' : 'cartao' })
     return r.ok ? NextResponse.json(r) : NextResponse.json({ error: r.erro }, { status: r.status })
   } catch (e) {
     console.error('[MAE ASSINATURA POST]', e)

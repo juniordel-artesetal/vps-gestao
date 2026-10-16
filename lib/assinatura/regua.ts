@@ -4,10 +4,14 @@
 // que paga, então precisa ser exercitável com datas forjadas, sem banco e sem
 // e-mail. Quem aplica os efeitos é o job (app/api/cron/assinaturas).
 //
-// Espelha lib/assinatura: DIAS_CARENCIA de 7 dias vale tanto para trial quanto
+// Espelha lib/assinatura: DIAS_CARENCIA (3 dias desde 16/10/2026) vale tanto para trial quanto
 // para inadimplência — "nunca assinou" e "assinou e atrasou" seguem o mesmo
 // caminho, o que simplifica o código e a conversa com a artesã.
 import { DIAS_CARENCIA } from './index'
+
+/** A régua das MENSALIDADES (lib/cobranca/reguaMensal.ts, 16/10/2026) manda os e-mails de atraso/bloqueio/cobrança de
+ *  toda mensalidade do Asaas — aqui eles só saem para o ANUAL (ou com REGUA_MENSAL=off), para nunca chegar em dobro. */
+export const reguaMensalLigada = (env: Record<string, string | undefined> = process.env) => (env.REGUA_MENSAL ?? '').trim().toLowerCase() !== 'off'
 
 /** Pontos de contato da régua. O texto de cada um vem do Júnior/Diretor. */
 export type TipoAviso =
@@ -112,8 +116,10 @@ export function diasAte(data: Date | null | undefined, hoje = new Date()): numbe
  * qualquer cálculo de data, para que nenhuma conta protegida ou de outro caminho
  * apareça sequer como candidata.
  */
-export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
+export function decidir(l: LinhaRegua, hoje = new Date(), mensal = reguaMensalLigada()): Decisao {
   const nada = (motivo: string): Decisao => ({ workspaceId: l.workspaceId, avisos: [], cortar: false, motivo })
+  // mensalidade com a régua das mensalidades ligada: os e-mails de atraso saem de lá
+  const avisosDeAtrasoAqui = !mensal || l.ciclo === 'YEARLY' || l.planoEscolhido === 'anual'
 
   // 1) Trava do Master vence tudo — nem avisa, nem corta.
   if (l.liberacaoManual) return nada('liberação manual do Master')
@@ -125,6 +131,7 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
   //    7 dias, até ela pagar ou cancelar (decisão do Júnior, 15/10/2026). Cortada sem assinatura viva: nada.
   if (l.assinaturaStatus === 'CANCELADA') return nada('já em CANCELADA')
   if (l.assinaturaStatus === 'CORTADA') {
+    if (!avisosDeAtrasoAqui) return nada('já em CORTADA — a cobrança sai pela régua das mensalidades')
     const dc = l.assinaturaExpira ? -(diasAte(l.assinaturaExpira, hoje) ?? 0) : null
     if (l.assinaturaViva && dc !== null && diaDeLembrete(dc)) return { workspaceId: l.workspaceId, avisos: ['COBRANCA_SEMANAL'], cortar: false, motivo: `acesso pausado e a assinatura segue em aberto há ${dc} dias — lembrete semanal` }
     return nada(l.assinaturaViva ? 'já em CORTADA (lembrete só a cada 7 dias)' : 'já em CORTADA, sem assinatura viva')
@@ -185,10 +192,10 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
     if (d === 3) { avisos.push('TRIAL_D3'); motivo = 'trial acaba em 3 dias' }
     else if (d === 1) { avisos.push('TRIAL_D1'); motivo = 'trial acaba amanhã' }
     else if (d === 0 && !noCartao) { avisos.push('TRIAL_FIM'); motivo = 'trial acabou hoje' }
-    else if (d === -3) { avisos.push('TRIAL_POS_D3'); motivo = 'trial vencido há 3 dias' }
-    else if (d === -6) { avisos.push('TRIAL_POS_D6'); motivo = 'trial vencido há 6 dias — véspera do corte' }
+    else if (d === -1) { avisos.push('TRIAL_POS_D3'); motivo = 'trial vencido há 1 dia' }
+    else if (d === -DIAS_CARENCIA) { avisos.push('TRIAL_POS_D6'); motivo = `trial vencido há ${DIAS_CARENCIA} dias — véspera do corte` }
     else if (d <= -(DIAS_CARENCIA + 1)) {
-      // Dia 21 = trial (14) + carência (7). Só corta DEPOIS do último dia.
+      // Dia 18 = trial (14) + carência (3). Só corta DEPOIS do último dia.
       cortar = true; avisos.push('CORTE')
       motivo = `trial vencido há ${-d} dias — carência esgotada`
     }
@@ -197,13 +204,15 @@ export function decidir(l: LinhaRegua, hoje = new Date()): Decisao {
   // ── INADIMPLÊNCIA ────────────────────────────────────────────────────────
   if (l.assinaturaStatus === 'INADIMPLENTE' && l.assinaturaExpira) {
     const d = diasAte(l.assinaturaExpira, hoje)
-    if (d === 0) { avisos.push('INAD_D0'); motivo = 'cobrança venceu hoje' }
-    else if (d === -3) { avisos.push('INAD_D3'); motivo = 'cobrança vencida há 3 dias' }
-    else if (d === -6) { avisos.push('INAD_D6'); motivo = 'vencida há 6 dias — véspera do corte' }
-    else if (d !== null && d <= -(DIAS_CARENCIA + 1)) {
+    if (!avisosDeAtrasoAqui) { /* e-mails pela régua das mensalidades; aqui só o corte */ }
+    else if (d === 0) { avisos.push('INAD_D0'); motivo = 'cobrança venceu hoje' }
+    else if (d === -1) { avisos.push('INAD_D3'); motivo = 'cobrança vencida há 1 dia' }
+    else if (d === -DIAS_CARENCIA) { avisos.push('INAD_D6'); motivo = `vencida há ${DIAS_CARENCIA} dias — véspera do corte` }
+    if (d !== null && d <= -(DIAS_CARENCIA + 1)) {
       cortar = true
       // o e-mail de pausa sai UMA vez (no dia do corte); depois, o lembrete semanal até pagar ou cancelar
-      if (d === -(DIAS_CARENCIA + 1)) avisos.push('CORTE')
+      if (!avisosDeAtrasoAqui) { /* idem */ }
+      else if (d === -(DIAS_CARENCIA + 1)) avisos.push('CORTE')
       else if (diaDeLembrete(-d) && l.assinaturaViva !== false) avisos.push('COBRANCA_SEMANAL')
       motivo = `cobrança vencida há ${-d} dias — carência esgotada`
     }

@@ -14,7 +14,7 @@ export type CicloMae = 'mensal' | 'anual'
 /** SEM teste grátis (decisão do Júnior, 15/10/2026): 0 = a 1ª cobrança é no checkout. Voltar a ter teste = pôr os dias aqui. */
 export const TRIAL_DIAS_MAE = 0
 /** Dias de acesso depois do vencimento não pago (régua do add-on). */
-export const CARENCIA_DIAS_MAE = 5
+export const CARENCIA_DIAS_MAE = 3
 /** Prefixo do externalReference das assinaturas do MAE (≠ "MAE:", que é compra da Loja da Naty). */
 export const MARCA_ASSINATURA_MAE = 'MAEA:'
 export const refAssinaturaMae = (ws: string) => `${MARCA_ASSINATURA_MAE}${ws}`

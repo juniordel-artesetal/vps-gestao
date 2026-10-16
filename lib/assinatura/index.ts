@@ -12,8 +12,9 @@ import { prisma } from '@/lib/prisma'
 /** Trial PADRÃO. Política de 04/10/2026: 14 dias para TODAS as origens (site, parceira, influenciadora),
  *  com cartão obrigatório (pré-autorização de R$ 5). Trials já iniciados mantêm o prazo com que começaram. */
 export const DIAS_TRIAL = 14
-/** Carência após o vencimento (ou após o fim do trial) antes do corte. */
-export const DIAS_CARENCIA = 7
+/** Carência após o vencimento (ou após o fim do trial) antes do corte. 16/10/2026 (Júnior): 3 dias para todas as
+ *  mensalidades — acesso até o D+3, bloqueado no D+4 (= TOLERANCIA_ATRASO_DIAS da régua das mensalidades). */
+export const DIAS_CARENCIA = 3
 
 export type StatusAssinatura =
   | 'AGUARDANDO_PAGAMENTO' // conta criada, checkout não concluído — SEM acesso

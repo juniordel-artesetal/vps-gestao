@@ -11,7 +11,7 @@ import { concluirCheckout, encerrarCheckout } from '@/lib/assinatura/checkout'
 import { chamarAsaas } from './client'
 import { getCredenciais } from './config'
 import { parceiroDoWorkspace } from '@/lib/assinatura/parceiro'
-import { ativarSePixAuto } from './pixAutomatico'
+import { ativarSePixAuto, workspaceDoLinkPixAuto, encerrarAssinaturasTrocadasPorPixAuto, ehAssinaturaTrocadaPorPixAuto } from './pixAutomatico'
 import { aplicarEventoPessoal } from '@/lib/pessoal/assinatura'
 import { aplicarEventoMarketplaces } from '@/lib/marketplace/assinatura'
 import { aplicarEventoEstudio, ehExternalRefEstudio } from '@/lib/estudio/compra'
@@ -67,6 +67,8 @@ export interface PayloadAsaas {
     /** Checkout hospedado que criou a assinatura (= Workspace.checkoutId). As cobranças dessas
      *  assinaturas chegam SEM externalReference — é por aqui que se acha o workspace. */
     checkoutSession?: string
+    /** Link de pagamento que gerou a cobrança (Pix Automático pelo link — ver linkPixAuto.ts). */
+    paymentLink?: string
     /** Id do parcelamento. Ausente = pagamento em 1x. */
     installment?: string
     /** Split ECOADO pelo Asaas — a fonte da verdade do snapshot da comissão. */
@@ -94,6 +96,9 @@ function gerarId() {
  */
 async function workspaceDaCobranca(pag: NonNullable<PayloadAsaas['payment']>): Promise<string | null> {
   if (pag.externalReference && !/^[A-Z]+:/.test(pag.externalReference)) return pag.externalReference
+  // Pix Automático pelo link de pagamento: a conta está gravada com o id do link
+  const doLink = await workspaceDoLinkPixAuto(pag.paymentLink)
+  if (doLink) return doLink
   if (!pag.checkoutSession) return null
   const [w] = await prisma.$queryRaw`
     SELECT "id" FROM "Workspace" WHERE "checkoutId" = ${pag.checkoutSession} LIMIT 1
@@ -198,6 +203,8 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
     // TROCA PARA O ANUAL: a mensal apagada na troca NÃO cancela a conta (o anual já está no lugar dela).
     try { if (await ehMensalMigrada(sub)) { console.log(`[ASAAS-WH] mensal ${sub} encerrada pela troca para o anual`); return { aplicado: true } } }
     catch (e) { console.error('[ASAAS-WH] troca para o anual (encerra):', (e as Error)?.message); throw e }
+    // TROCA PELO PIX AUTOMÁTICO: a assinatura antiga (ex.: cartão recusado) encerrada por nós NÃO cancela a conta
+    if (await ehAssinaturaTrocadaPorPixAuto(sub)) { console.log(`[ASAAS-WH] assinatura ${sub} encerrada pela troca para o Pix Automático`); return { aplicado: true } }
     // ADD-ON MARKETPLACES: se a subscription encerrada é do módulo (outro produto), corta só o
     // acesso ao módulo (respeitando cortesia) e não toca a assinatura principal do SOA.
     try { if (await aplicarEventoMarketplaces(evento, sub, null)) return { aplicado: true } }
@@ -318,8 +325,19 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
     return { aplicado: true }
   }
 
-  // Dono da cobrança (externalReference OU checkoutSession do checkout hospedado).
+  // Dono da cobrança (externalReference OU checkoutSession do checkout hospedado OU link do Pix Automático).
   const wsDono = await workspaceDaCobranca(pag).catch(() => null)
+
+  // PIX AUTOMÁTICO PELO LINK: o 1º Pix pago ativa a conta ANTES do resto (assim a AsaasAssinatura nasce e o acesso
+  // ganha o vencimento certo, mesmo para quem vinha da Hotmart) e encerra a assinatura antiga — sem cobrança dupla.
+  const pixAutoLink = pago && pag.paymentLink && wsDono && (await workspaceDoLinkPixAuto(pag.paymentLink)) === wsDono
+  if (pixAutoLink) {
+    try {
+      await ativarSePixAuto(wsDono)
+      if (pag.subscription) await encerrarAssinaturasTrocadasPorPixAuto(wsDono, pag.subscription)
+      console.log(`[ASAAS-WH] pix-auto (link) ativado ws=${wsDono}`)
+    } catch (e) { console.error('[ASAAS-WH] pix-auto (link) ativação:', (e as Error)?.message) }
+  }
 
   // UPSERT: cobrança gerada POR ASSINATURA nasce no Asaas, não no nosso banco —
   // o webhook é a primeira vez que a vemos. Sem isto, ela nunca seria registrada.
@@ -414,6 +432,7 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
       if (ehPixAuto) { orfaoPago = undefined; console.log(`[ASAAS-WH] pix-auto ativado ws=${pag.externalReference}`) }
     } catch (e) { console.error('[ASAAS-WH] pix-auto ativação:', (e as Error)?.message) }
   }
+  if (pixAutoLink) orfaoPago = undefined
 
   return { aplicado: true, orfaoPago }
 }

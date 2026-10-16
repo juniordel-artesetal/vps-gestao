@@ -1,18 +1,24 @@
-// Cria a autorização Pix Automático (recorrência via Pix sem cartão) para a assinatura do SOA.
-// Valor do plano é definido no SERVIDOR (nunca vem do cliente). Retorna o QR/copia-e-cola do 1º pagamento.
+// Pix Automático (recorrência via Pix, sem cartão) para a assinatura MENSAL do SOA — pelo LINK de pagamento do Asaas
+// (lib/pagamento/asaas/linkPixAuto.ts; a API de autorizações dá 403 na nossa conta). Valor definido no SERVIDOR.
+// Devolve { link }: a cliente paga o 1º Pix e autoriza no app do banco; o webhook ativa a conta.
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { PLANOS } from '@/lib/assinatura/planos'
-import { criarAutorizacaoPixAuto } from '@/lib/pagamento/asaas/pixAutomatico'
+import { ensurePixAutoTable } from '@/lib/pagamento/asaas/pixAutomatico'
+import { criarLinkPixAuto, pixAutoLigado } from '@/lib/pagamento/asaas/linkPixAuto'
+import { getCredenciais } from '@/lib/pagamento/asaas/config'
+import { URL_SOA } from '@/lib/baseUrl'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(req: Request) {
+export async function POST() {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
   const workspaceId = session.user.workspaceId
+  if (session.user.role !== 'ADMIN') return NextResponse.json({ error: 'Só a administradora da conta pode assinar.' }, { status: 403 })
+  if (!pixAutoLigado()) return NextResponse.json({ error: 'O Pix Automático está indisponível no momento. Use o cartão ou o Pix mês a mês.' }, { status: 400 })
 
   // Teste grátis = SÓ CARTÃO. Pix Automático fica para quem já passou do teste.
   const [ws] = await prisma.$queryRaw`
@@ -21,29 +27,26 @@ export async function POST(req: Request) {
   if (ws?.assinaturaStatus === 'AGUARDANDO_PAGAMENTO') {
     return NextResponse.json({ error: 'Para começar o teste grátis, cadastre um cartão de crédito.' }, { status: 400 })
   }
-
-  const b = await req.json().catch(() => ({}))
-  const cpfCnpj = String(b?.cpfCnpj || '').replace(/\D/g, '')
-  if (cpfCnpj.length !== 11 && cpfCnpj.length !== 14) {
-    return NextResponse.json({ error: 'Informe um CPF ou CNPJ válido' }, { status: 400 })
+  if (ws?.assinaturaStatus === 'ATIVA' || ws?.assinaturaStatus === 'TRIAL') {
+    return NextResponse.json({ error: 'Sua assinatura já está ativa — não é preciso assinar de novo.' }, { status: 400 })
   }
-
-  // Nome/e-mail para o cadastro do cliente no Asaas (da sessão/workspace).
-  const nome = session.user.name || session.user.workspaceNome || 'Cliente SOA'
-  const email = session.user.email || ''
-  if (!email) return NextResponse.json({ error: 'Sua conta está sem e-mail — atualize antes de assinar' }, { status: 400 })
 
   // Pix Automático = recorrência MENSAL. Valor do servidor (não confiar no cliente).
   const valor = PLANOS.mensal.valor
-
-  const r = await criarAutorizacaoPixAuto(workspaceId, { valor, nome, email, cpfCnpj, descricao: 'Assinatura SOA — plano mensal (Pix Automático)' })
-  if (!r.ok) return NextResponse.json({ error: r.erro || 'Não foi possível iniciar o Pix Automático' }, { status: 502 })
-
-  return NextResponse.json({
-    ok: true,
-    authorizationId: r.authorizationId,
-    payload: r.payload,           // Pix copia-e-cola do 1º pagamento
-    encodedImage: r.encodedImage, // QR Code (PNG base64)
-    valor,
+  const r = await criarLinkPixAuto({
+    nome: 'SOA mensal · Pix Automático',
+    descricao: `SOA mensal: ${valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/mês no Pix Automático — autorize uma vez no app do seu banco; cancele quando quiser.`,
+    valor, externalReference: workspaceId, sucesso: `${URL_SOA}/assinatura?pago=1`,
   })
+  if (!r.ok) return NextResponse.json({ error: r.erro }, { status: 502 })
+
+  // o vínculo link → conta (o webhook acha a conta pelo externalReference OU pelo id do link)
+  await ensurePixAutoTable()
+  const { sandbox } = await getCredenciais()
+  await prisma.$executeRaw`
+    INSERT INTO "AsaasPixAutoAutorizacao" ("id","workspaceId","asaasAuthorizationId","status","frequencia","valor","sandbox","criadoEm","atualizadoEm")
+    VALUES (${Math.random().toString(36).slice(2) + Date.now().toString(36)}, ${workspaceId}, ${'plink:' + r.id}, 'CREATED', 'MONTHLY', ${valor}, ${sandbox}, NOW(), NOW())
+    ON CONFLICT ("asaasAuthorizationId") DO NOTHING`
+  console.log(`[PIX AUTO] link SOA ws=${workspaceId} link=${r.id}`)
+  return NextResponse.json({ ok: true, link: r.url, valor })
 }

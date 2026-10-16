@@ -4,11 +4,13 @@
 // com a venda fechada, "em breve". Pagamento na página do Asaas (nenhum dado de cartão passa pelo SOA).
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Check, Sparkles, CreditCard, ArrowRight } from 'lucide-react'
+import { Loader2, Check, Sparkles, CreditCard, ArrowRight, Repeat } from 'lucide-react'
 
 interface Parcela { parcelas: number; valorParcela: number; total: number }
 interface Estado {
   venda: boolean; plano: 'addon' | 'standalone'; trialDias: number
+  /** Mensal também no Pix Automático (link do Asaas) */
+  pixAuto?: boolean
   precos: { mensal: number; anual: number } | null; parcelamentoAnual: Parcela[]; economiaAnual: number | null
   assinatura: { status: string; ciclo: string; parcelas: number; valor: number; trialAte: string | null; proximoVencimento: string | null; trialUsado: boolean; checkoutAberto: boolean } | null
   acesso: { liberado: boolean; origem: string | null; ate: string | null }
@@ -24,6 +26,7 @@ export default function AssinaturaMaePage() {
   const [erro, setErro] = useState<string | null>(null)
   const [ciclo, setCiclo] = useState<'mensal' | 'anual'>('anual')
   const [parcelas, setParcelas] = useState(12)
+  const [metodo, setMetodo] = useState<'cartao' | 'pix'>('cartao')
   const [indo, setIndo] = useState(false)
   const [cancelando, setCancelando] = useState(false)
   const [voltouPago, setVoltouPago] = useState(false)
@@ -60,7 +63,7 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
   async function assinar() {
     setIndo(true); setErro(null)
     try {
-      const r = await fetch('/api/mae/assinatura', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ciclo, parcelas: ciclo === 'anual' ? parcelas : 1 }) })
+      const r = await fetch('/api/mae/assinatura', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ciclo, parcelas: ciclo === 'anual' ? parcelas : 1, metodo: ciclo === 'mensal' && e?.pixAuto && metodo === 'pix' && e?.assinatura?.status !== 'INADIMPLENTE' ? 'pix' : 'cartao' }) })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error)
       window.location.href = j.link
@@ -75,6 +78,7 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
   const mais = standalone ? '' : '+ '
   const parc = e.parcelamentoAnual.find(p => p.parcelas === parcelas) ?? e.parcelamentoAnual[0]
   const vivo = a && ['TRIAL', 'ATIVA'].includes(a.status)
+  const pixMensal = !!e.pixAuto && metodo === 'pix' && a?.status !== 'INADIMPLENTE'
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-5" data-mae-assinatura>
@@ -143,9 +147,22 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
               O anual parcelado não renova sozinho: no fim do ano, é só assinar de novo.
             </p>
           )}
+          {ciclo === 'mensal' && e.pixAuto && a?.status !== 'INADIMPLENTE' && (
+            <div className="grid gap-2 sm:grid-cols-2" data-metodo-mae>
+              <button onClick={() => setMetodo('cartao')} className={`rounded-xl border-2 px-3 py-2 text-left text-sm ${metodo === 'cartao' ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700'}`} data-metodo-mae-opcao="cartao">
+                <span className="flex items-center gap-2 font-semibold"><CreditCard className="w-4 h-4" /> Cartão de crédito</span>
+                <span className="text-xs text-gray-500">cobrança automática todo mês</span>
+              </button>
+              <button onClick={() => setMetodo('pix')} className={`rounded-xl border-2 px-3 py-2 text-left text-sm ${metodo === 'pix' ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700'}`} data-metodo-mae-opcao="pix">
+                <span className="flex items-center gap-2 font-semibold"><Repeat className="w-4 h-4" /> Pix Automático</span>
+                <span className="text-xs text-gray-500">sem cartão: autoriza uma vez no banco</span>
+              </button>
+            </div>
+          )}
           <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 px-4 py-3 text-sm text-gray-600 dark:text-gray-300 space-y-1">
             {!a?.trialUsado && e.trialDias > 0 && <p className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> <b>{e.trialDias} dias grátis</b> — a 1ª cobrança só vem no fim do teste (cancele antes e não paga nada).</p>}
-            <p className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> {ciclo === 'anual' && parcelas === 1 ? 'Pix ou cartão de crédito' : 'Cartão de crédito'}, na página segura do Asaas{e.trialDias > 0 ? '. Para validar o cartão fazemos uma reserva de R$ 5,00 que é liberada na hora.' : '. A 1ª cobrança é feita na hora; cancele quando quiser, sem novas cobranças.'}</p>
+            {pixMensal ? <p className="flex items-center gap-2" data-aviso-pix-auto><Repeat className="w-4 h-4" /> Pix Automático, na página segura do Asaas: pague o 1º Pix e autorize no app do seu banco — as próximas mensalidades são debitadas sozinhas. Cancele quando quiser.</p> :
+            <p className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> {ciclo === 'anual' && parcelas === 1 ? 'Pix ou cartão de crédito' : 'Cartão de crédito'}, na página segura do Asaas{e.trialDias > 0 ? '. Para validar o cartão fazemos uma reserva de R$ 5,00 que é liberada na hora.' : '. A 1ª cobrança é feita na hora; cancele quando quiser, sem novas cobranças.'}</p>}
             {!standalone && <p className="text-xs text-gray-500">O Método Mãe é cobrado à parte e soma à sua assinatura do SOA (mensal ou anual, como já está). Vale enquanto o SOA estiver ativo.</p>}
           </div>
           <button onClick={() => void assinar()} disabled={indo} className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-3 font-semibold disabled:opacity-50" data-assinar-mae>
