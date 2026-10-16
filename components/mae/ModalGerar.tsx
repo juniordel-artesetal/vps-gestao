@@ -55,6 +55,23 @@ export default function ModalGerar({ itens, exemploPedido, comSoa, nomeEtapa, on
           )}
         </fieldset>
 
+        {/* Lote 22 (item 262): PDF ou PNG (300 dpi, uma imagem por folha; várias folhas saem num .zip) */}
+        <fieldset className="space-y-1" data-formato-gerar>
+          <legend className={sec}>Formato</legend>
+          <div className="flex flex-wrap gap-3 text-xs">
+            <label className="flex items-center gap-1.5"><input type="radio" className={ck} checked={e.formato === 'pdf'} onChange={() => mudar({ formato: 'pdf' })} data-formato="pdf" /> PDF</label>
+            <label className="flex items-center gap-1.5"><input type="radio" className={ck} checked={e.formato === 'png'} onChange={() => mudar({ formato: 'png' })} data-formato="png" /> PNG <span className="text-gray-500">(300 dpi, uma imagem por folha; várias folhas → .zip)</span></label>
+          </div>
+          {e.formato === 'png' && (
+            <div className="ml-6 flex flex-wrap gap-3 text-xs" data-fundo-png>
+              <span className="text-gray-500">Fundo:</span>
+              <label className="flex items-center gap-1.5"><input type="radio" className={ck} checked={e.fundoPng === 'branco'} onChange={() => mudar({ fundoPng: 'branco' })} data-fundo-png-opcao="branco" /> branco</label>
+              <label className="flex items-center gap-1.5"><input type="radio" className={ck} checked={e.fundoPng === 'transparente'} onChange={() => mudar({ fundoPng: 'transparente' })} data-fundo-png-opcao="transparente" /> transparente</label>
+              <span className="text-gray-500">A marca de registro sai no PNG, no mesmo lugar do PDF.</span>
+            </div>
+          )}
+        </fieldset>
+
         {/* a ordem das páginas só existe no lote (com 1 pedido por PDF não faz diferença) */}
         {lote && (
           <fieldset className="space-y-1">

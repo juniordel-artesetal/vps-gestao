@@ -8,7 +8,6 @@
 // produto, com a quantidade no nome (item 60: `Kit Festa/Naty_5anos_Sereia_KitFesta12.pdf`).
 import DicasMae from './Dicas'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSession } from 'next-auth/react'
 import { planoDaTela, type PlanoTela } from '@/lib/mae/pedidos/planoTela'
 import { useSoMae } from './soMae'
 import Link from 'next/link'
@@ -50,6 +49,10 @@ import BuscaTemas from './BuscaTemas'
 import { letrasFaltandoNoPedido, garantirFontesDosTemas } from './letrasFaltando'
 import { aguardandoDados } from '@/lib/mae/pedidos/pedidos'
 
+/** Lote 22 (item 262): a escolha de PNG (e o fundo) da tela Gerar → opção da exportação. */
+const saidaPngDe = (e: EscolhasGerar): { saidaPng?: { transparente: boolean } } => (e.formato === 'png' ? { saidaPng: { transparente: e.fundoPng === 'transparente' } } : {})
+/** Pedido avulso do MAE (planilha / cadastro manual — id "mo_…", ver lib/mae/servidor/plano.ts). */
+const ehAvulso = (id: string) => id.startsWith('mo_')
 const inp = 'w-full border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-xs bg-white dark:bg-gray-800'
 const pilula = (on: boolean) => `inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs border ${on ? 'bg-orange-500 text-white border-orange-500' : 'border-gray-200 dark:border-gray-700'}`
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
@@ -354,9 +357,9 @@ export default function EdicaoEmMassa() {
   const [perguntaMassa, setPerguntaMassa] = useState<{ themeId: string; temas: string[] } | null>(null)
   // Lote 7 (itens 119/120): plano (SOA completo × só MAE), etapa de Impressão do fluxo e o "iniciar impressão"
   // Lote 22 (item 257): a conta "só MAE" vem marcada no login — os botões dela nunca dependem da consulta
-  const { data: sessao } = useSession()
+  const soMaeSessao = useSoMae()
   const [planoConsulta, setPlanoConsulta] = useState<PlanoTela | null>(null)
-  const plano = planoDaTela((sessao?.user as { soMae?: boolean } | undefined)?.soMae === true, planoConsulta)
+  const plano = planoDaTela(soMaeSessao, planoConsulta)
   const [etapa, setEtapa] = useState<EtapaImpressao | null | undefined>(undefined)
   const [semEtapaDispensado, setSemEtapaDispensado] = useState(false)
   const [msgStatus, setMsgStatus] = useState<string | null>(null)
@@ -542,6 +545,36 @@ export default function EdicaoEmMassa() {
       setMsgStatus(d ? `Pedido #${l.pedido.numero}: 2 nomes (${d.nome1} e ${d.nome2}).` : `Pedido #${l.pedido.numero}: volta a um nome só.`)
     } catch (e) { setErro(`Não consegui salvar os 2 nomes: ${mensagemDeErro(e)}`) }
   }
+  /** Lote 22 (item 263): relê um pedido do servidor e troca as linhas dele (quantidade nova vale na próxima geração). */
+  async function recarregarPedido(pai: string) {
+    const p = await apiMae.pedido(pai)
+    if (!p) return
+    setLinhas(ls => { const i = ls.findIndex(x => idDoPedido(x.pedido.id) === pai); if (i < 0) return ls; const novas = linhasDoPedido(p, temas, vinculos, apelidos); return [...ls.slice(0, i), ...novas, ...ls.slice(i).filter(x => idDoPedido(x.pedido.id) !== pai)] })
+  }
+  /** Lote 22 (item 263): quantidade editável na linha — só pedido avulso do MAE (importado ou manual). */
+  async function salvarQtdItem(l: LinhaPedido, indice: number, valor: string) {
+    const n = Math.round(Number(valor.replace(/\D/g, '')))
+    const atual = l.pedido.itens[indice]?.quantidade ?? 1
+    if (!n || n < 1 || n > 9999 || n === atual) return
+    const pai = idDoPedido(l.pedido.id)
+    try {
+      await apiMae.qtdItens(pai, l.pedido.itens.map((it, i) => (i === indice ? n : (it.quantidade ?? 1))))
+      await recarregarPedido(pai)
+      setMsgStatus(`Pedido #${l.pedido.numero}: quantidade ${n} — vale na próxima geração.`)
+    } catch (e) { setErro(`Não consegui mudar a quantidade: ${mensagemDeErro(e)}`) }
+  }
+  async function qtdEmMassa() {
+    const ids = [...new Set(linhas.filter(l => marcadas.has(l.pedido.id) && ehAvulso(l.pedido.id)).map(l => idDoPedido(l.pedido.id)))]
+    if (!ids.length) return
+    const v = prompt(`Nova quantidade para ${ids.length} pedido${ids.length > 1 ? 's' : ''} (vale para cada produto do pedido):`, '1')
+    const n = Math.round(Number((v ?? '').replace(/\D/g, '')))
+    if (!v || !n || n < 1 || n > 9999) return
+    try {
+      await apiMae.qtdEmMassa(ids, n)
+      for (const id of ids) await recarregarPedido(id)
+      setMsgStatus(`Quantidade ${n} em ${ids.length} pedido${ids.length > 1 ? 's' : ''} — vale na próxima geração.`)
+    } catch (e) { setErro(`Não consegui mudar a quantidade: ${mensagemDeErro(e)}`) }
+  }
   /** Lote 18 (item 224): grava a divisão (null desfaz) e troca as linhas do pedido pelas sublinhas (ou pela linha). */
   async function salvarDivisoes(pai: string, divs: DivisaoPedido[] | null) {
     try {
@@ -668,7 +701,7 @@ export default function EdicaoEmMassa() {
     const hoje = new Date(), dm = `${String(hoje.getDate()).padStart(2, '0')}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
     const nomeArquivo = `LOTE_${parteArquivo(lt.grupo?.nome || f.nome, 30)}_${dm}`
     const r = await gerarArteDoPedido({ raiz: raiz!, pedido: l0.pedido, tema: lote.tema, base: lote.doc, identidade, marcas, registrar: false,
-      opcoes: { ...opcoesDoPedido({ agrupar: 'tudo', linhas: e.linhas, apliques: e.apliques, fundoMarca: e.fundoMarca, folgaMarcaMm: e.folgaMarcaMm }, juntos ? { _PEDIDO: '1' } : pedidos[0].valores, pasta),
+      opcoes: { ...opcoesDoPedido({ agrupar: 'tudo', linhas: e.linhas, apliques: e.apliques, fundoMarca: e.fundoMarca, folgaMarcaMm: e.folgaMarcaMm, ...saidaPngDe(e) }, juntos ? { _PEDIDO: '1' } : pedidos[0].valores, pasta),
         pedido: l0.pedido.numero, valoresPorSlot: lote.valoresPorSlot, svg: e.cortePorPedido, dxf: e.cortePorPedido,
         ...(juntos ? { nomeArquivo, rotulos: lote.rotulos } : { sufixoArquivo: sufixoQuantidade(lt.grupo?.nome || f.nome, nsU[0]) }) } })
     const pdf = r.arquivos.find(a => a.endsWith('.pdf')) ?? null
@@ -717,7 +750,9 @@ export default function EdicaoEmMassa() {
     const identidade = useEditor.getState().identidade
     const docs = new Map<string, { tema: DocTema; base: DocTrabalho }>()
     const abrir = async (t: TemaDisponivel) => { let d = docs.get(t.id); if (!d) { d = await abrirTemaEBase(r0, t); docs.set(t.id, d) } return d }
-    const opc = { agrupar: (e.modo === 'pedido' && e.folhaSeparada ? 'prancheta' : 'tudo') as 'tudo' | 'prancheta', linhas: e.linhas, apliques: e.apliques, fundoMarca: e.fundoMarca, folgaMarcaMm: e.folgaMarcaMm }
+    // Lote 22 (item 262): PNG = o PDF do pedido página a página (as folhas juntas num .zip)
+    const saida = saidaPngDe(e)
+    const opc = { agrupar: (e.modo === 'pedido' && e.folhaSeparada && !saida.saidaPng ? 'prancheta' : 'tudo') as 'tudo' | 'prancheta', linhas: e.linhas, apliques: e.apliques, fundoMarca: e.fundoMarca, folgaMarcaMm: e.folgaMarcaMm, ...saida }
     const rs: ResultadoItem<Resultado>[] = []
     let feitos = 0
     // 1) produtos com COMPOSIÇÃO por unidade (Nutella…) — o lote de folha por unidade
@@ -755,7 +790,7 @@ export default function EdicaoEmMassa() {
           const pk = pedidosDoKit(l, valores, conta)
           const kd = docDoKit(d.base, d.tema, distribuirKit(kitDaProva(k, e), pk.contas, k.contagem, pk.juntar, k.grupo?.composicao), pk.peds)
           r = await gerarArteDoPedido({ raiz: r0, pedido: l.pedido, tema: kd.tema, base: kd.doc, identidade, marcas,
-            opcoes: { ...opcoesDoPedido({ ...opc, agrupar: e.folhaSeparada ? 'prancheta' : 'tudo' }, valores, pasta), pedido: l.pedido.numero, valoresPorSlot: kd.valoresPorSlot,
+            opcoes: { ...opcoesDoPedido({ ...opc, agrupar: e.folhaSeparada && !saida.saidaPng ? 'prancheta' : 'tudo' }, valores, pasta), pedido: l.pedido.numero, valoresPorSlot: kd.valoresPorSlot,
               svg: e.cortePorPedido, dxf: e.cortePorPedido, sufixoArquivo: sufixoQuantidade(k.grupo?.nome ?? '', k.contagem === 'pecas' ? (conta.pecas || conta.kits) : conta.kits) } })
         } else {
           const m = montarItem(d, l, alvo, e)
@@ -813,7 +848,7 @@ export default function EdicaoEmMassa() {
       }
       const rl = await gerarLotesImpressao({ raiz: r0, identidade, marcas }, itens, {
         ordem: e.ordem, intercalar: e.intercalar, identificacao: e.identificacao, maxPedidos: e.maxPedidos, separarPorProduto: e.porProduto,
-        linhas: e.linhas, apliques: e.apliques, fundoMarca: e.fundoMarca, folgaMarcaMm: e.folgaMarcaMm, pasta: pastaDosLotes,
+        linhas: e.linhas, apliques: e.apliques, fundoMarca: e.fundoMarca, folgaMarcaMm: e.folgaMarcaMm, pasta: pastaDosLotes, ...saidaPngDe(e),
       }, { aoProgredir: (f, _t, atual) => setProgresso({ feitos: feitos + f, total: fila.length, atual }), cancelado: () => cancelar.current })
       for (const r of rl) {
         const it = itens.find(x => x.id === r.id)
@@ -859,7 +894,7 @@ export default function EdicaoEmMassa() {
       {/* Lote 7 (item 120): MAE avulso — os pedidos vêm da planilha da Shopee ou do cadastro manual */}
       {plano === 'mae' && (
         <div className="flex flex-wrap items-center gap-2" data-pedidos-avulso>
-          <button className={btn} onClick={() => setImportar(true)} data-abrir-importar><Upload className="w-3.5 h-3.5" /> Importar pedidos (planilha da Shopee)</button>
+          <button className={btn} onClick={() => setImportar(true)} data-abrir-importar><Upload className="w-3.5 h-3.5" /> Importar pedidos (planilha)</button>
           <button className={btn} onClick={() => setManual(true)} data-abrir-manual><Plus className="w-3.5 h-3.5" /> Novo pedido</button>
         </div>
       )}
@@ -890,6 +925,7 @@ export default function EdicaoEmMassa() {
               <button className="underline" onClick={() => setMarcadas(new Set(foraDoLote.map(l => l.pedido.id)))} data-ver-fora-do-lote>Ver quais</button>
             </span>
           )}
+          {plano === 'mae' && [...marcadas].some(ehAvulso) && <button className={btn} disabled={!!progresso} onClick={() => void qtdEmMassa()} data-qtd-massa>Mudar quantidade</button>}
           <button className={btn} disabled={!!progresso} onClick={() => void aplicarStatus([...marcadas], 'impresso')} data-marcar-impresso-massa><Printer className="w-3.5 h-3.5" /> Marcar como impresso</button>
           {/* Lote 18 (item 223): desfaz — volta para Pendentes */}
           {[...marcadas].some(id => impressa(id)) && <button className={btn} disabled={!!progresso} onClick={() => void desmarcarImpresso([...marcadas].filter(impressa))} data-desmarcar-impresso-massa>Desmarcar impresso</button>}
@@ -990,6 +1026,16 @@ export default function EdicaoEmMassa() {
                         {/* Lote 7 (item 119): a etapa atual na produção do SOA */}
                         {l.pedido.etapa && <div className={`text-[10px] ${l.pedido.etapa.tipo === 'impressao' || (etapa && l.pedido.etapa.nome === etapa.nome) ? 'text-sky-700 font-semibold' : 'text-gray-500'}`} data-etapa-linha>etapa: {l.pedido.etapa.nome}</div>}
                         {(pv.produto || pv.variacao) && <div className="text-[10px] text-gray-400 truncate" title={`${pv.produto}${pv.variacao ? ` · ${pv.variacao}` : ''}`} data-produto-linha>{pv.produto}{pv.variacao ? <> · <span className="text-gray-500">{pv.variacao}</span></> : null}</div>}
+                        {/* Lote 22 (item 263): pedido avulso (só MAE) — a quantidade de cada produto é editável aqui */}
+                        {plano === 'mae' && ehAvulso(l.pedido.id) && !l.divisao && l.pedido.itens.map((it, i) => (
+                          <label key={`${l.pedido.id}-q${i}`} className="mt-0.5 flex items-center gap-1 text-[10px] text-gray-500" data-qtd-avulso>
+                            Qtd{l.pedido.itens.length > 1 ? <> de <span className="truncate max-w-[6rem]" title={it.nome}>{it.nome}</span></> : null}
+                            <input type="text" inputMode="numeric" defaultValue={String(it.quantidade ?? 1)} key={`${l.pedido.id}-${i}-${it.quantidade ?? 1}`}
+                              className="w-12 rounded border border-gray-200 bg-transparent px-1 py-0.5 text-right tabular-nums dark:border-gray-700"
+                              onBlur={e => void salvarQtdItem(l, i, e.target.value)} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                              aria-label={`Quantidade de ${it.nome}`} data-qtd-avulso-input />
+                          </label>
+                        ))}
                         {/* Lote 8 (item 127): o TEMA do pedido (campo do SOA) editável aqui — a cliente comprou Bosque e quer Jardim */}
                         <label className="mt-1 block"><span className="text-[9px] uppercase text-gray-400">Tema do pedido</span>{campo('TEMA', l.campos.TEMA ?? '', 'TEMA do pedido', 'min-w-[9rem]')}</label>
                         {/* Lote 13 (item 181): busca rápida (os temas deste produto primeiro) */}

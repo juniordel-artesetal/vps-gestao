@@ -4,8 +4,9 @@
 import { useSession } from 'next-auth/react'
 
 export function useSoMae(): boolean {
-  const { data } = useSession()
-  return (data?.user as { soMae?: boolean } | undefined)?.soMae === true
+  // fora do <SessionProvider> o useSession devolve undefined em produção — nunca derrubar a tela por isso
+  const s = useSession() as ReturnType<typeof useSession> | undefined
+  return (s?.data?.user as { soMae?: boolean } | undefined)?.soMae === true
 }
 
 /** Dica dos Grupos/Folhas para quem é só MAE. */

@@ -121,3 +121,29 @@ export function lugarDoRotulo(pagW: number, pagH: number, caixas: { x: number; y
   const melhor = [...lados].sort((a, b) => b.livre - a.livre)[0]
   return melhor.livre >= minMm ? melhor.r : null
 }
+
+/**
+ * Lote 22 (item 260): "a mesma caixa junta" também para o TEMA PRONTO com a marca desenhada no PDF. A chave do modelo
+ * é a marca de registro da prancheta ("mr:…") e, sem marca, o nome da caixa ("n:…") — a página sem marca (marca veio no
+ * PDF do tema pronto) ficava num grupo à parte, no fim do lote. Aqui ela passa a usar a marca da MESMA caixa (pelo
+ * nome comparável). Se a mesma caixa aparece com duas marcas DIFERENTES de verdade (outra máquina), elas não se juntam
+ * e sai o aviso para o resumo do lote. Puro.
+ */
+export function unificarModelos<T extends BlocoLote & { caixa?: string }>(blocos: T[], nomeDoPedido: (pedido: string) => string = p => p): { blocos: T[]; avisos: string[] } {
+  const marcasDaCaixa = new Map<string, Set<string>>()
+  for (const b of blocos) if (b.caixa && b.modelo.startsWith('mr:')) {
+    const s = marcasDaCaixa.get(b.caixa) ?? new Set<string>(); s.add(b.modelo); marcasDaCaixa.set(b.caixa, s)
+  }
+  const out = blocos.map(b => {
+    if (!b.caixa || b.modelo.startsWith('mr:')) return b
+    const ms = marcasDaCaixa.get(b.caixa)
+    return ms && ms.size === 1 ? { ...b, modelo: [...ms][0] } : b
+  })
+  const avisos: string[] = []
+  for (const [caixa, ms] of marcasDaCaixa) {
+    if (ms.size < 2) continue
+    const quem = [...ms].map(m => [...new Set(out.filter(b => b.caixa === caixa && b.modelo === m).map(b => nomeDoPedido(b.pedido)))].join(', '))
+    avisos.push(`${ms.size} grupos de marca na caixa ${caixa.toUpperCase()}: ${quem.join(' e ')} não ficam juntos (marcas de registro diferentes).`)
+  }
+  return { blocos: out, avisos }
+}

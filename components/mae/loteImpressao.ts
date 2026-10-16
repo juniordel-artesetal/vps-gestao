@@ -13,7 +13,8 @@ import type { PaginaPdf } from '@/lib/mae/exportar/pdf'
 import { caixaDoMolde } from '@/lib/mae/exportar/linhas'
 import { nomeLivre } from '@/lib/mae/exportar/nomes'
 import { gravar, listar } from '@/lib/mae/biblioteca/arquivos'
-import { ordenarLote, dividirEmPartes, nomeDoLote, lugarDoRotulo, type OrdemLote } from '@/lib/mae/pedidos/ordemLote'
+import { nomeFolhaPng, semExtensao } from '@/lib/mae/exportar/nomesPng'
+import { ordenarLote, unificarModelos, dividirEmPartes, nomeDoLote, lugarDoRotulo, type OrdemLote } from '@/lib/mae/pedidos/ordemLote'
 import { exportar } from './exportarMae'
 import { opcoesDoPedido } from './pedidosMae'
 import type { Identidade } from './arquivosMae'
@@ -45,6 +46,8 @@ export interface OpcoesLote {
   fundoMarca?: boolean; folgaMarcaMm?: number
   /** Lote 11 (item 165): a pasta ÚNICA dos lotes (Exportações/hoje/LOTES), fora das pastas de produto. */
   pasta: string
+  /** Lote 22 (item 262): o lote em PNG (300 dpi, uma imagem por folha, num .zip). */
+  saidaPng?: { transparente: boolean }
 }
 export interface ResultadoLote { id: string; arquivo: string | null; lote: string | null; revisar: boolean; alertas: string[]; erro?: string }
 
@@ -79,7 +82,7 @@ export async function gerarLotesImpressao(
     const partes = dividirEmPartes(lista, o.maxPedidos)
     for (const [ip, parte] of partes.entries()) {
       if (cb.cancelado?.()) return out
-      type Bloco = { pedido: string; tema: string; modelo: string; indice: number; pagina: PaginaPdf; copias: number }
+      type Bloco = { pedido: string; tema: string; modelo: string; caixa?: string; indice: number; pagina: PaginaPdf; copias: number }
       const blocos: Bloco[] = []
       const porItem: ResultadoLote[] = []
       for (const it of parte) {
@@ -88,25 +91,40 @@ export async function gerarLotesImpressao(
         try {
           const r = await exportar({ raiz: ctx.raiz, doc: it.doc, tema: it.tema, identidade: ctx.identidade, marcas: ctx.marcas }, {
             ...opcoesDoPedido({ agrupar: 'tudo', linhas: o.linhas, apliques: o.apliques, fundoMarca: o.fundoMarca, folgaMarcaMm: o.folgaMarcaMm }, it.valores, o.pasta),
-            pedido: it.numero, copias: it.copias, soPaginas: true,
+            pedido: it.numero, copias: it.copias, soPaginas: true, ...(o.saidaPng ? { saidaPng: o.saidaPng } : {}),
             ...(it.valoresPorSlot ? { valoresPorSlot: it.valoresPorSlot } : {}),
             ...(it.rotulos ? { rotulos: it.rotulos } : o.identificacao ? { rotulos: rotulosDoPedido(it.doc, `#${it.numero}${it.nome ? ` · ${it.nome}` : ''}`) } : {}),
           })
-          ;(r.paginas ?? []).forEach((p, k) => blocos.push({ pedido: it.id, tema: it.temaNome, modelo: p.modelo, indice: k, pagina: p.pagina, copias: p.copias }))
+          ;(r.paginas ?? []).forEach((p, k) => blocos.push({ pedido: it.id, tema: it.temaNome, modelo: p.modelo, caixa: p.caixa, indice: k, pagina: p.pagina, copias: p.copias }))
           porItem.push({ id: it.id, arquivo: null, lote: null, revisar: r.revisar, alertas: r.alertas.filter(a => !/girada 90°|MARCA foi girada/.test(a)) })
         } catch (e) { porItem.push({ id: it.id, arquivo: null, lote: null, revisar: false, alertas: [], erro: mensagemDeErro(e) }) }
         feitos++
       }
       // a ordem escolhida; cada página repetida nas suas cópias (o MESMO objeto → a imagem entra 1× no PDF)
-      const paginas = ordenarLote(blocos, o.ordem, o.intercalar).flatMap(b => Array.from({ length: b.copias }, () => b.pagina))
+      // Lote 22 (item 260): tema pronto sem marca entra na mesma caixa; marcas diferentes de verdade → aviso no resumo
+      const un = unificarModelos(blocos, id => { const it = parte.find(x => x.id === id); return it ? `${it.nome || `#${it.numero}`} (${it.temaNome})` : id })
+      if (un.avisos.length && porItem[0]) porItem[0].alertas.push(...un.avisos)
+      const paginas = ordenarLote(un.blocos, o.ordem, o.intercalar).flatMap(b => Array.from({ length: b.copias }, () => b.pagina))
       if (!paginas.length) { out.push(...porItem.map(r => ({ ...r, erro: r.erro ?? 'nenhuma página para imprimir' }))); continue }
       const { montarPdf } = await import('@/lib/mae/exportar/pdf')
       const pasta = o.pasta
       const existentes = new Set((await listar(ctx.raiz, pasta).catch(() => [])).map(e => e.nome))
       const nPed = parte.reduce((s, it) => s + (it.nPedidos ?? 1), 0)
       const nome = nomeDoLote({ data: hoje, papel: produto || undefined, pedidos: nPed, parte: ip + 1, partes: partes.length, paginas: paginas.length })
-      const arquivo = `${pasta}/${nomeLivre(`${nome}.pdf`, existentes)}`
-      await gravar(ctx.raiz, arquivo, new Blob([await montarPdf(paginas, `Lote${produto ? ` ${produto}` : ''} · ${nPed} pedidos`) as BlobPart], { type: 'application/pdf' }))
+      const pdfBytes = await montarPdf(paginas, `Lote${produto ? ` ${produto}` : ''} · ${nPed} pedidos`)
+      let arquivo: string
+      if (o.saidaPng) {
+        // Lote 22 (item 262): cada folha do lote vira um PNG de 300 dpi (a mesma página do PDF) — tudo num .zip
+        cb.aoProgredir?.(feitos, itens.length, `Lote${produto ? ` ${produto}` : ''} · gerando os PNG…`)
+        const { pdfComoPngs, zipDosPngs } = await import('@/lib/mae/importacao/navegador')
+        const pngs = await pdfComoPngs(pdfBytes, 300, o.saidaPng.transparente, (n, t) => cb.aoProgredir?.(feitos, itens.length, `Lote · PNG ${n} de ${t}`))
+        const base = semExtensao(nomeLivre(`${nome}.zip`, existentes))
+        arquivo = `${pasta}/${base}.zip`
+        await gravar(ctx.raiz, arquivo, await zipDosPngs(pngs.map((b, i) => ({ nome: nomeFolhaPng(base, i, pngs.length), blob: b }))))
+      } else {
+        arquivo = `${pasta}/${nomeLivre(`${nome}.pdf`, existentes)}`
+        await gravar(ctx.raiz, arquivo, new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }))
+      }
       out.push(...porItem.map(r => (r.erro ? r : { ...r, arquivo, lote: nome })))
     }
   }

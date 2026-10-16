@@ -414,7 +414,7 @@ export default function PainelTema() {
     const aj = tema.textSlotAdjust?.[id] ?? {}
     return (
       <li key={`t:${id}`} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${slotSel === id ? 'bg-orange-50 ring-1 ring-orange-300' : multiSel.some(x => x.tipo === 'texto' && x.id === id) ? 'bg-violet-50 ring-1 ring-violet-300' : 'hover:bg-gray-50'}`}
-        onClick={e => { if (e.ctrlKey || e.metaKey) { alternarNaSelecao({ tipo: 'texto', id }); return } set({ slot: id, face: faceId, camada: null, grupoSel: null, multiSel: [] }) }} data-camada-texto={variavel}
+        onClick={e => { if (e.ctrlKey || e.metaKey || e.shiftKey) { alternarNaSelecao({ tipo: 'texto', id }); return } set({ slot: id, face: faceId, camada: null, grupoSel: null, multiSel: [] }) }} data-camada-texto={variavel}
         // Lote 10 (itens 151/152): texto também arrasta na ordem e tem o menu do botão direito
         draggable onDragStart={e => { e.dataTransfer.setData(TIPO_CAMADA, `t:${id}`); e.dataTransfer.effectAllowed = 'move' }}
         onDragOver={e => { if (e.dataTransfer.types.includes(TIPO_CAMADA)) e.preventDefault() }}
@@ -463,7 +463,7 @@ export default function PainelTema() {
     const local = faceDaParte && !exclusiva && propriedadesAjustadas(tema, faceDaParte, c.id).length > 0
     return (
       <li key={c.id} className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs cursor-pointer ${camada === c.id ? 'bg-orange-50 ring-1 ring-orange-300' : multiSel.some(x => x.tipo === 'camada' && x.id === c.id) ? 'bg-violet-50 ring-1 ring-violet-300' : 'hover:bg-gray-50'} ${(c as { recortada?: boolean }).recortada ? 'ml-4' : ''}`}
-        onClick={e => { if (e.altKey) { alternarMascaraDeCorte(c.id); return } if (e.ctrlKey || e.metaKey) { alternarNaSelecao({ tipo: 'camada', id: c.id }); return } set({ camada: c.id, slot: null, grupoSel: null, multiSel: [] }) }}
+        onClick={e => { if (e.altKey) { alternarMascaraDeCorte(c.id); return } if (e.ctrlKey || e.metaKey || e.shiftKey) { alternarNaSelecao({ tipo: 'camada', id: c.id }); return } set({ camada: c.id, slot: null, grupoSel: null, multiSel: [] }) }}
         // Lote 6 (item 81): arrastar na lista muda a ordem; clique direito abre o menu (frente/trás/topo/fundo)
         draggable onDragStart={e => { e.dataTransfer.setData(TIPO_CAMADA, c.id); e.dataTransfer.effectAllowed = 'move' }}
         onDragOver={e => { if (e.dataTransfer.types.includes(TIPO_CAMADA)) e.preventDefault() }}
@@ -658,10 +658,10 @@ export default function PainelTema() {
             </ul>
           </>)}
           {!camadas.length && <p className="text-[11px] text-gray-400">Arraste um papel para a miniatura de {parte.name}.</p>}
-          {/* Lote 9 (item 142): Ctrl + clique (aqui) ou Shift + clique (na arte) soma itens; Ctrl+G agrupa */}
+          {/* Lote 9 (item 142) / Lote 22 (item 261): Shift ou Ctrl + clique (aqui ou na arte) soma itens; Ctrl+G agrupa */}
           {multiSel.length >= 2
             ? <button className={btn + ' w-full justify-center !border-violet-400 text-violet-800'} onClick={() => agruparSelecao()} data-agrupar>Agrupar {multiSel.length} itens (Ctrl+G)</button>
-            : <p className="text-[10px] text-gray-400">Para agrupar (logo + nome, por exemplo): Ctrl + clique nos itens desta lista, ou Shift + clique na arte, e Ctrl+G.</p>}
+            : <p className="text-[10px] text-gray-400">Para selecionar vários: Shift ou Ctrl + clique nos itens (nesta lista ou na arte). Para agrupar (logo + nome, por exemplo): Ctrl+G.</p>}
           {/* Lote 6 (item 92): monte a arte na MAIOR medida e recomponha nas outras (sem esticar) */}
           {doc.molds.some(ehPecaPorMedida) && (
             <button className={btn + ' w-full justify-center !border-orange-400 text-orange-800'} onClick={() => {

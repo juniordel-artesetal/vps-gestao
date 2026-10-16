@@ -25,12 +25,16 @@ export interface EscolhasGerar {
   quantidade: 'pedido' | 'um'
   folhaSeparada: boolean
   cortePorPedido: boolean
+  /** Lote 22 (item 262): PDF ou PNG (300 dpi, uma imagem por folha; várias → .zip) e o fundo do PNG. */
+  formato: 'pdf' | 'png'
+  fundoPng: 'branco' | 'transparente'
 }
 
 export const ESCOLHAS_PADRAO: EscolhasGerar = {
   modo: 'pedido', porProduto: true, maxPedidos: 10, ordem: 'modelo', intercalar: true,
   identificacao: true, fundoMarca: true, folgaMarcaMm: 1, linhas: false, apliques: true, aproveitar: false,
   iniciarImpressao: true, quantidade: 'pedido', folhaSeparada: false, cortePorPedido: false,
+  formato: 'pdf', fundoPng: 'branco',
 }
 
 /** Junta o que veio guardado (de uma versão antiga, ou mexido à mão) com o padrão, só com valores válidos. */
@@ -44,6 +48,8 @@ export function escolhasValidas(x: unknown): EscolhasGerar {
   if (e.modo !== 'pedido' && e.modo !== 'lote') e.modo = 'pedido'
   if (e.ordem !== 'modelo' && e.ordem !== 'pedido') e.ordem = 'modelo'
   if (e.quantidade !== 'pedido' && e.quantidade !== 'um') e.quantidade = 'pedido'
+  if (e.formato !== 'pdf' && e.formato !== 'png') e.formato = 'pdf'
+  if (e.fundoPng !== 'branco' && e.fundoPng !== 'transparente') e.fundoPng = 'branco'
   e.maxPedidos = Math.max(1, Math.min(50, Math.round(e.maxPedidos) || 10))
   e.folgaMarcaMm = Math.max(0, Math.min(10, e.folgaMarcaMm))
   return e

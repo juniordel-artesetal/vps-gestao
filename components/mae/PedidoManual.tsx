@@ -5,10 +5,11 @@ import { useState } from 'react'
 import { Plus, X, Loader2 } from 'lucide-react'
 import { apiMae } from './pedidosMae'
 import { mensagemDeErro } from '@/lib/mae/erros'
+import { CANAIS_MAE } from '@/lib/mae/pedidos/planilha'
 
 const inp = 'w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-2 py-1 text-xs'
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
-const VAZIO = { numero: '', cliente: '', produto: '', quantidade: '1', nome: '', idade: '', tema: '', dataEnvio: '', observacao: '' }
+const VAZIO = { numero: '', cliente: '', produto: '', quantidade: '1', nome: '', idade: '', tema: '', dataEnvio: '', observacao: '', canal: '' }
 
 export default function PedidoManual({ produtos, onFechar, onCriado }: { produtos: string[]; onFechar: () => void; onCriado: () => void }) {
   const [f, setF] = useState(VAZIO)
@@ -20,11 +21,11 @@ export default function PedidoManual({ produtos, onFechar, onCriado }: { produto
   async function salvar(continuar: boolean) {
     setErro(null); setIndo(true)
     try {
-      const r = await apiMae.criarPedidos([{ origem: 'manual', numero: f.numero, cliente: f.cliente || null, dataEnvio: f.dataEnvio || null, observacao: f.observacao || null,
+      const r = await apiMae.criarPedidos([{ origem: 'manual', numero: f.numero, cliente: f.cliente || null, canal: f.canal || null, dataEnvio: f.dataEnvio || null, observacao: f.observacao || null,
         itens: [{ nome: f.produto, quantidade: parseInt(f.quantidade) || 1 }], campos: { ...(f.nome ? { NOME: f.nome } : {}), ...(f.idade ? { IDADE: f.idade } : {}), ...(f.tema ? { TEMA: f.tema } : {}) } }])
       if (!r.novos) { setErro(`Já existe um pedido nº ${f.numero}.`); return }
       onCriado()
-      if (continuar) setF(x => ({ ...VAZIO, produto: x.produto, dataEnvio: x.dataEnvio })); else onFechar()
+      if (continuar) setF(x => ({ ...VAZIO, produto: x.produto, dataEnvio: x.dataEnvio, canal: x.canal })); else onFechar()
     } catch (e) { setErro(mensagemDeErro(e)) } finally { setIndo(false) }
   }
   const ok = f.numero.trim() && f.produto.trim()
@@ -44,6 +45,13 @@ export default function PedidoManual({ produtos, onFechar, onCriado }: { produto
           {campo('idade', 'Idade', { inputMode: 'numeric' })}
           {campo('tema', 'Tema')}
           {campo('dataEnvio', 'Prazo de envio', { type: 'date' })}
+          {/* Lote 22 (item 264): de onde veio o pedido */}
+          <label className="block text-[11px] text-gray-600">Canal
+            <select value={f.canal} onChange={e => setF(x => ({ ...x, canal: e.target.value }))} className={inp} data-manual="canal">
+              <option value="">— não informar —</option>
+              {CANAIS_MAE.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
         </div>
         <label className="block text-[11px] text-gray-600">Observação<textarea value={f.observacao} onChange={e => setF(x => ({ ...x, observacao: e.target.value }))} rows={2} className={inp} data-manual="observacao" /></label>
         {erro && <p className="text-xs text-red-600">{erro}</p>}

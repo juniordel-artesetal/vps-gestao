@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { serialize } from '@/lib/serialize'
 import { contaMae, recusa } from '@/lib/mae/servidor/acesso'
 import { planoMae, ehPedidoMae } from '@/lib/mae/servidor/plano'
-import { listarSoa, listarMae, patchSoa, patchMae, temaEmMassaSoa, temaEmMassaMae } from '@/lib/mae/servidor/fontes'
+import { listarSoa, listarMae, patchSoa, patchMae, temaEmMassaSoa, temaEmMassaMae, qtdEmMassaMae, qtdValida } from '@/lib/mae/servidor/fontes'
 import { temaValido } from '@/lib/mae/servidor/ajustesPedido'
 
 export const dynamic = 'force-dynamic'
@@ -25,6 +25,12 @@ export async function PATCH(req: NextRequest) {
     const b = await req.json().catch(() => ({})) as Record<string, unknown>
     if (Array.isArray(b.ids)) {
       const ids = b.ids.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 80).slice(0, 500)
+      // Lote 22 (item 263): quantidade em massa — só pedidos avulsos do MAE (o do SOA vem do pedido do SOA)
+      if (b.quantidade !== undefined) {
+        const n = qtdValida(b.quantidade)
+        if (!ids.length || n == null) return recusa('pedidos', { error: 'Quantidade inválida (de 1 a 9999)' }, 400)
+        return NextResponse.json({ ok: true, atualizados: await qtdEmMassaMae(c.workspaceId, ids.filter(ehPedidoMae), n) })
+      }
       const temaId = temaValido(b.temaId)
       if (!ids.length || temaId === undefined) return recusa('pedidos', { error: 'ids e temaId obrigatórios' }, 400)
       const n = (await temaEmMassaSoa(c.workspaceId, ids.filter(i => !ehPedidoMae(i)), temaId)) + (await temaEmMassaMae(c.workspaceId, ids.filter(ehPedidoMae), temaId))

@@ -24,6 +24,7 @@ import { comPhys } from '@/lib/mae/exportar/png'
 import { TAMANHOS_CANAIS } from '@/lib/estudio/tamanhos'
 import PainelIA, { type ResultadoIA } from '@/components/estudio/editor/PainelIA'
 import { useEditor } from './estado'
+import { useSoMae } from './soMae'
 import { adicionarCamada, editarCamada, paginaAtual } from './acoesCamadas'
 import { garantirArquivos, motorDaPagina } from './motorEditor'
 import { GOOGLE_FONTS, garantirFontes, registroFontes, useFontes } from './fontesTexto'
@@ -51,6 +52,8 @@ export function PainelDesign() {
   const [tam, setTam] = useState('A4')
   const [lista, setLista] = useState<{ nome: string; path: string }[] | null>(null)
   const [antigos, setAntigos] = useState<{ id: string; nome: string }[] | null>(null)
+  // Lote 22 (item 265): a conta só MAE não tem o SOA Design — sem a lista dos designs antigos
+  const soMae = useSoMae()
   const [msg, setMsg] = useState<string | null>(null)
   const ativa = doc.artboards.find(a => a.id === pagina) ?? doc.artboards[0]
   const aplicar = useMaeDoc.getState().aplicar
@@ -74,7 +77,7 @@ export function PainelDesign() {
     if (!raiz) return
     const es = await listar(raiz, PASTA_DESIGNS).catch(() => [])
     setLista(es.filter(e => e.tipo === 'arquivo' && e.nome.endsWith('.mae-design.json')).map(e => ({ nome: e.nome.replace('.mae-design.json', ''), path: `${PASTA_DESIGNS}/${e.nome}` })))
-    fetch('/api/estudio/designs').then(r => r.ok ? r.json() : null).then(j => setAntigos((j?.designs ?? []).map((x: { id: string; nome: string }) => ({ id: x.id, nome: x.nome })))).catch(() => setAntigos([]))
+    if (!soMae) fetch('/api/estudio/designs').then(r => r.ok ? r.json() : null).then(j => setAntigos((j?.designs ?? []).map((x: { id: string; nome: string }) => ({ id: x.id, nome: x.nome })))).catch(() => setAntigos([]))
   }
   async function abrir(path: string) {
     if (!raiz) return
@@ -137,7 +140,7 @@ export function PainelDesign() {
         <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 text-xs space-y-1" data-lista-designs>
           {!lista.length && <p className="text-gray-400">Nenhum design em {PASTA_DESIGNS}/ ainda.</p>}
           {lista.map(l => <button key={l.path} className="block underline text-left" onClick={() => abrir(l.path)}>{l.nome}</button>)}
-          {!!antigos?.length && (<>
+          {!soMae && !!antigos?.length && (<>
             <p className="pt-1 text-[10px] uppercase text-gray-400">Designs antigos (nuvem, SOA Design)</p>
             {antigos.map(a => <a key={a.id} className="block underline text-left text-gray-600" href={`/estudio/editor/${a.id}`}>{a.nome}</a>)}
           </>)}

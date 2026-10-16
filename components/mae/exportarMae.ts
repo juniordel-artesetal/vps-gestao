@@ -21,7 +21,8 @@ import { garantirArquivos, motorDaPagina } from './motorEditor'
 import { garantirFontesDoTema, garantirFontesDosValores, registroFontes } from './fontesTexto'
 import type { Identidade } from './arquivosMae'
 import type { MarcaRegistro } from './sincronia'
-import { chaveDaCaixa } from '@/lib/mae/exportar/planejar'
+import { chaveDaCaixa, nomeDeCaixa } from '@/lib/mae/exportar/planejar'
+import { nomeFolhaPng, semExtensao } from '@/lib/mae/exportar/nomesPng'
 import { causaSemArte } from '@/lib/mae/editor/diagnostico'
 
 export const DPI_APROVACAO = 150
@@ -32,6 +33,11 @@ export interface OpcoesExportar {
   /** Aprovação: tudo numa imagem só, ou uma imagem por molde. */
   aprovacao: 'folha' | 'molde'
   formato: 'pdf' | 'png'
+  /**
+   * Lote 22 (item 262): gerar em PNG (pedido e lote) — o PDF é montado como sempre e cada página vira um PNG de 300 dpi
+   * (a mesma página: marca, linhas, identificação). Várias folhas → um .zip. Transparente: a arte entra em PNG.
+   */
+  saidaPng?: { transparente: boolean }
   /** Impressão: um arquivo por molde, por prancheta, ou tudo junto (PDF de várias páginas). */
   agrupar: 'molde' | 'prancheta' | 'tudo'
   /** Lote 5 (item 63): padrão = a sobra da BASE (Arte inteligente) — uma fonte só. */
@@ -91,7 +97,8 @@ export interface Contexto {
 export interface ResultadoExportar {
   pasta: string; arquivos: string[]; alertas: string[]; revisar: boolean
   /** Lote 7 (item 117): com `soPaginas`, as páginas (a mesma página serve para todas as cópias). */
-  paginas?: { pagina: PaginaPdf; artboardId: string; modelo: string; copias: number }[]
+  /** `caixa`: o nome comparável da caixa (sem a marca) — Lote 22 (item 260): junta o tema pronto sem marca à caixa igual. */
+  paginas?: { pagina: PaginaPdf; artboardId: string; modelo: string; caixa?: string; copias: number }[]
 }
 
 const base = { visible: true, locked: true, opacity: 1, fill: 1, blendMode: 'normal' as const, clip: false }
@@ -359,7 +366,7 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
         }
       } catch { alertas.push(`A marca "${marca.nome}" não está na Biblioteca (Marcas de registro/) — exportei sem marca.`) }
     }
-    const png = await renderizar(ab, [...layers, ...brancos])
+    const png = await renderizar(ab, [...layers, ...brancos], o.saidaPng?.transparente ? null : '#ffffff')
     // Lote 4 (item 21): no PDF as linhas vão em vetor por cima da arte — os elementos "pode vazar" saem numa
     // camada transparente desenhada DEPOIS das linhas (inteiros, por cima da linha do molde)
     const vazados = layers.filter(n => n.id.endsWith(':vaza'))
@@ -390,7 +397,7 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
     paginas.push({ ab, i, png, pagina: {
       larguraMm: pagW, alturaMm: pagH, marca: marcaPdf, ...(sobreLinhas ? { sobreLinhas } : {}), ...(encaixeFaca ? { encaixe: encaixeFaca } : {}),
       // JPG de alta qualidade dentro do PDF (fundo branco): o mesmo resultado na impressão, arquivo ~10× menor
-      arte: o.formato === 'pdf' ? { bytes: await paraJpg(png), tipo: 'jpg', larguraMm: ab.widthMm, alturaMm: ab.heightMm } : { bytes: new Uint8Array(await png.arrayBuffer()), tipo: 'png', larguraMm: ab.widthMm, alturaMm: ab.heightMm },
+      arte: o.formato === 'pdf' && !o.saidaPng?.transparente ? { bytes: await paraJpg(png), tipo: 'jpg', larguraMm: ab.widthMm, alturaMm: ab.heightMm } : { bytes: new Uint8Array(await png.arrayBuffer()), tipo: 'png', larguraMm: ab.widthMm, alturaMm: ab.heightMm },
       linhas, moldesPdf, identidade: { qr, logo },
     } })
     // só as linhas, para a máquina de corte
@@ -410,7 +417,8 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   if (o.soPaginas && o.formato === 'pdf') {
     // o modelo da página = a CAIXA: Lote 14 (item 200) pela marca de registro da prancheta (mesma marca = mesmo molde
     // de corte, seja qual for o nome dela em cada base); sem marca, "Mesma caixa que…" ou o nome comparável
-    paginasLote = paginas.map(p => ({ pagina: p.pagina, artboardId: p.ab.id, copias: copiasDe(p.ab.id),
+    const nomeCaixa = (p: (typeof paginas)[number]) => p.ab.mesmaCaixa || doc.molds.filter(m => m.artboardId === p.ab.id && m.faces.length).map(m => m.name).join('+') || p.ab.name || nomeFolha(p.ab, p.i)
+    paginasLote = paginas.map(p => ({ pagina: p.pagina, artboardId: p.ab.id, copias: copiasDe(p.ab.id), caixa: nomeDeCaixa(nomeCaixa(p)),
       modelo: chaveDaCaixa(p.ab, doc.molds.filter(m => m.artboardId === p.ab.id && m.faces.length).map(m => m.name).join('+') || p.ab.name || nomeFolha(p.ab, p.i)) }))
   } else {
   const titulo = `${nomeTema}${nomeVar ? ` · ${nomeVar}` : ''}`
@@ -427,7 +435,16 @@ export async function exportar(ctx: Contexto, o0: OpcoesExportar): Promise<Resul
   } else if (o.agrupar === 'tudo') {
     // Lote 5 (item 79): cada folha repetida na quantidade dela (o MESMO objeto de página → a imagem é embutida 1×)
     const repetidas = paginas.flatMap(p => Array.from({ length: copiasDe(p.ab.id) }, () => p.pagina))
-    await salvar(nomeDe('impressao', 'pdf'), new Blob([await montarPdf(repetidas.length ? repetidas : paginas.map(p => p.pagina), titulo) as BlobPart], { type: 'application/pdf' }))
+    const pdfBytes = await montarPdf(repetidas.length ? repetidas : paginas.map(p => p.pagina), titulo)
+    if (o.saidaPng) {
+      // Lote 22 (item 262): cada página do PDF vira um PNG de 300 dpi; várias folhas → um .zip
+      passo('Gerando os PNG…')
+      const { pdfComoPngs, zipDosPngs } = await import('@/lib/mae/importacao/navegador')
+      const pngs = await pdfComoPngs(pdfBytes, DPI_IMPRESSAO, o.saidaPng.transparente)
+      const base = semExtensao(nomeDe('impressao', pngs.length > 1 ? 'zip' : 'png'))
+      if (pngs.length === 1) await salvar(`${base}.png`, pngs[0])
+      else await salvar(`${base}.zip`, await zipDosPngs(pngs.map((b, i) => ({ nome: nomeFolhaPng(base, i, pngs.length), blob: b }))))
+    } else await salvar(nomeDe('impressao', 'pdf'), new Blob([pdfBytes as BlobPart], { type: 'application/pdf' }))
   } else if (o.agrupar === 'prancheta') {
     for (const p of paginas) {
       const n = copiasDe(p.ab.id)

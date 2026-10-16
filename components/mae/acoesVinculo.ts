@@ -669,14 +669,17 @@ export function alinharSelecao(como: 'esq' | 'centro' | 'dir' | 'topo' | 'meio' 
   })
 }
 /** Opacidade, ocultar e excluir em todas as CAMADAS selecionadas (os textos são da base: o olho deles é por caixa). */
-export function editarSelecao(o: { opacidade?: number; visivel?: boolean; excluir?: boolean }, juntar?: string) {
+export function editarSelecao(o: { opacidade?: number; visivel?: boolean; excluir?: boolean; travar?: boolean }, juntar?: string) {
   const ed = useEditor.getState(), d = base(), camadas = ed.multiSel.filter(i => i.tipo === 'camada').map(i => i.id)
   const textos = ed.multiSel.filter(i => i.tipo === 'texto').map(i => i.id)
-  const label = o.excluir ? `Excluir ${camadas.length} camada(s)` : o.visivel !== undefined ? (o.visivel ? 'Mostrar a seleção' : 'Ocultar a seleção') : 'Opacidade da seleção'
+  const label = o.excluir ? `Excluir ${camadas.length} camada(s)` : o.travar !== undefined ? (o.travar ? 'Travar a seleção' : 'Destravar a seleção') : o.visivel !== undefined ? (o.visivel ? 'Mostrar a seleção' : 'Ocultar a seleção') : 'Opacidade da seleção'
   aplicarTema(label, tt => {
     const t = tt as DocTema
     for (const id of camadas) {
-      const a = acharCamadaTema(t, id); if (!a || (a.c as { locked?: boolean }).locked) continue
+      const a = acharCamadaTema(t, id); if (!a) continue
+      // Lote 22 (item 261): travar/destravar todos de uma vez (o cadeado vale mesmo para as já travadas)
+      if (o.travar !== undefined) { if (o.travar) (a.c as { locked?: boolean }).locked = true; else delete (a.c as { locked?: boolean }).locked; continue }
+      if ((a.c as { locked?: boolean }).locked) continue
       if (o.excluir) { removerCamadaTema(t, id); continue }
       if (o.opacidade !== undefined) (a.c as { opacity?: number }).opacity = Math.max(0, Math.min(1, o.opacidade))
       if (o.visivel !== undefined) { if (o.visivel) delete (a.c as { visible?: boolean }).visible; else (a.c as { visible?: boolean }).visible = false }

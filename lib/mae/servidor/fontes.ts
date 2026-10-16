@@ -179,8 +179,16 @@ export async function listarMae(ws: string, id?: string): Promise<PedidoMae[]> {
 }
 
 export async function patchMae(ws: string, id: string, b: Record<string, unknown>): Promise<{ status: number; corpo: Record<string, unknown> }> {
-  const [l] = await prisma.$queryRaw<{ campos: unknown; ajustes: unknown }[]>`SELECT campos, ajustes FROM mae_orders WHERE workspace_id = ${ws} AND id = ${id} LIMIT 1`
+  const [l] = await prisma.$queryRaw<{ campos: unknown; ajustes: unknown; itens: unknown }[]>`SELECT campos, ajustes, itens FROM mae_orders WHERE workspace_id = ${ws} AND id = ${id} LIMIT 1`
   if (!l) return { status: 404, corpo: { error: 'Pedido não encontrado' } }
+  // Lote 22 (item 263): quantidade editável na linha (pedido avulso, importado ou manual)
+  if (Array.isArray(b.qtdItens)) {
+    const porItem = (b.qtdItens as unknown[]).slice(0, 30).map(qtdValida)
+    if (!porItem.some(x => x != null)) return { status: 400, corpo: { error: 'Quantidade inválida (de 1 a 9999)' } }
+    const novos = itensComQuantidade(l.itens, porItem)
+    await prisma.$executeRaw`UPDATE mae_orders SET itens = ${JSON.stringify(novos)}::jsonb, atualizado_em = now() WHERE workspace_id = ${ws} AND id = ${id}`
+    return { status: 200, corpo: { ok: true } }
+  }
   if (b.campos && typeof b.campos === 'object') {
     const novos: Record<string, string> = {}
     for (const [v, val] of Object.entries(b.campos as Record<string, unknown>)) {
@@ -194,6 +202,27 @@ export async function patchMae(ws: string, id: string, b: Record<string, unknown
   const mae = aplicarAjustes(lerExtras(l.ajustes), b)
   await prisma.$executeRaw`UPDATE mae_orders SET ajustes = ${JSON.stringify(mae)}::jsonb, atualizado_em = now() WHERE workspace_id = ${ws} AND id = ${id}`
   return { status: 200, corpo: { ok: true, ...ajustesParaTela(mae) } }
+}
+
+/** Lote 22 (item 263): quantidade de um item da linha (1–9999; inválida = null). Puro. */
+export const qtdValida = (v: unknown): number | null => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= 1 && n <= 9999 ? n : null }
+
+/** Lote 22 (item 263): troca a quantidade dos itens de um pedido avulso (`porItem[i]` = nova quantidade do item i). Puro. */
+export function itensComQuantidade(itens: unknown, porItem: (number | null)[]): { nome?: string; quantidade?: unknown }[] {
+  const lista = (Array.isArray(itens) ? itens : []) as { nome?: string; quantidade?: unknown }[]
+  return lista.map((it, i) => (porItem[i] != null ? { ...it, quantidade: porItem[i] } : it))
+}
+
+/** Lote 22 (item 263): a quantidade de TODOS os itens dos pedidos avulsos `ids` vira `n` (em massa). */
+export async function qtdEmMassaMae(ws: string, ids: string[], n: number): Promise<number> {
+  let total = 0
+  for (const id of ids) {
+    const [l] = await prisma.$queryRaw<{ itens: unknown }[]>`SELECT itens FROM mae_orders WHERE workspace_id = ${ws} AND id = ${id} LIMIT 1`
+    if (!l) continue
+    const novos = itensComQuantidade(l.itens, (Array.isArray(l.itens) ? l.itens : []).map(() => n))
+    total += await prisma.$executeRaw`UPDATE mae_orders SET itens = ${JSON.stringify(novos)}::jsonb, atualizado_em = now() WHERE workspace_id = ${ws} AND id = ${id}`
+  }
+  return total
 }
 
 export async function temaEmMassaMae(ws: string, ids: string[], temaId: string | null): Promise<number> {

@@ -3,9 +3,9 @@
 // MAPEAMENTO das colunas (o da Shopee já vem certo) e lembra o escolhido na Biblioteca. Nome, idade e tema saem da
 // observação quando é seguro; o resto se completa na lista. Pedido já importado (mesmo nº) não se repete.
 import { useState } from 'react'
-import { Upload, X, Loader2, Check } from 'lucide-react'
+import { Upload, X, Loader2, Check, Download } from 'lucide-react'
 import { gravar, ler } from '@/lib/mae/biblioteca/arquivos'
-import { CAMPOS_PLANILHA, ROTULO_CAMPO, OBRIGATORIOS, ARQ_MAPEAMENTO, sugerirMapeamento, mapeamentoCompleto, pedidosDaPlanilha, type Mapeamento } from '@/lib/mae/pedidos/planilha'
+import { CAMPOS_PLANILHA, ROTULO_CAMPO, OBRIGATORIOS, ARQ_MAPEAMENTO, CANAIS_MAE, COLUNAS_MODELO, EXEMPLO_MODELO, sugerirMapeamento, mapeamentoCompleto, pedidosDaPlanilha, type Mapeamento } from '@/lib/mae/pedidos/planilha'
 import { apiMae } from './pedidosMae'
 import { mensagemDeErro } from '@/lib/mae/erros'
 
@@ -16,6 +16,8 @@ export default function ImportarPlanilha({ raiz, onFechar, onImportado }: { raiz
   const [cabecalhos, setCabecalhos] = useState<string[]>([])
   const [mapa, setMapa] = useState<Mapeamento>({})
   const [arquivo, setArquivo] = useState('')
+  // Lote 22 (item 264): o canal dos pedidos da planilha (a coluna Canal, se houver, vale mais)
+  const [canal, setCanal] = useState<string>('Shopee')
   const [estado, setEstado] = useState<{ indo: boolean; msg: string | null; erro: string | null }>({ indo: false, msg: null, erro: null })
 
   async function abrir(f: File) {
@@ -30,7 +32,14 @@ export default function ImportarPlanilha({ raiz, onFechar, onImportado }: { raiz
       setEstado({ indo: false, msg: null, erro: rows.length ? null : 'A planilha está vazia.' })
     } catch (e) { setEstado({ indo: false, msg: null, erro: `Não consegui ler a planilha: ${mensagemDeErro(e)}` }) }
   }
-  const previa = linhas && mapeamentoCompleto(mapa) ? pedidosDaPlanilha(linhas, mapa) : null
+  const previa = linhas && mapeamentoCompleto(mapa) ? pedidosDaPlanilha(linhas, mapa, canal) : null
+  /** Lote 22 (item 264): modelo genérico (Elo7, WhatsApp, site) com as colunas que o MAE reconhece sozinho. */
+  async function baixarModelo() {
+    const XLSX = await import('xlsx')
+    const ws = XLSX.utils.json_to_sheet([EXEMPLO_MODELO], { header: [...COLUNAS_MODELO] })
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Pedidos')
+    XLSX.writeFile(wb, 'modelo-pedidos-metodo-mae.xlsx')
+  }
   async function importar() {
     if (!previa) return
     setEstado({ indo: true, msg: null, erro: null })
@@ -49,7 +58,16 @@ export default function ImportarPlanilha({ raiz, onFechar, onImportado }: { raiz
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onFechar} role="dialog" aria-modal="true" data-modal-importar-planilha>
       <div className="w-full max-w-xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-900 p-4 space-y-3 shadow-xl text-sm" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center gap-2"><Upload className="w-4 h-4 text-orange-500" /><b>Importar pedidos (planilha da Shopee)</b><button className="ml-auto" onClick={onFechar} aria-label="Fechar"><X className="w-4 h-4" /></button></div>
+        <div className="flex items-center gap-2"><Upload className="w-4 h-4 text-orange-500" /><b>Importar pedidos (planilha da Shopee ou modelo)</b><button className="ml-auto" onClick={onFechar} aria-label="Fechar"><X className="w-4 h-4" /></button></div>
+        <p className="text-xs text-gray-600">A planilha de pedidos da Shopee entra como está. Para Elo7, WhatsApp ou site, use o modelo: colunas Pedido, Produto, Quantidade, Tema, Nome, Idade, Prazo, Observação e Canal.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button className={btn} onClick={() => void baixarModelo()} data-baixar-modelo><Download className="w-3.5 h-3.5" /> Baixar modelo de planilha</button>
+          <label className="flex items-center gap-1 text-xs">Canal dos pedidos
+            <select value={canal} onChange={e => setCanal(e.target.value)} className="rounded border border-gray-200 bg-transparent px-1.5 py-1" data-canal-planilha>
+              {CANAIS_MAE.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+        </div>
         <label className={btn + ' cursor-pointer'}><Upload className="w-3.5 h-3.5" /> {arquivo ? `Trocar arquivo (${arquivo})` : 'Escolher a planilha (.xlsx ou .csv)'}
           <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) void abrir(f); e.target.value = '' }} data-arquivo-planilha />
         </label>

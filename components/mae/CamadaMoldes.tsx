@@ -183,6 +183,11 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
         const nova = atual.includes(p.id) ? atual.filter(x => x !== p.id) : [...atual, p.id]
         es.set({ partesSel: nova.length > 1 ? nova : [], parteAtiva: nova.at(-1) ?? p.id, face: faceId, camada: null, slot: null, multiSel: [], grupoSel: null })
       }
+      // Lote 22 (item 261): Ctrl + clique num ELEMENTO/texto soma o item (como o Shift); sem elemento em cima, a PARTE
+      if (ctrl && faceId && m && local) {
+        const pc = pilhaAqui(m, faceId, local, false), ac = escolherNaPilha(pc, es.slot ?? es.camada, alt)
+        if (ac && !(ac.tipo === 'camada' && ac.papel)) { alternarNaSelecao({ tipo: ac.tipo, id: ac.id }); return }
+      }
       if (ctrl && faceId) { somarParte(); return }
       // Lote 6 (item 84): clicou DENTRO do molde numa área branca que não é face → por quê + "Criar face aqui"
       if (m && local && !faceId && !m.faces.some(f => dentro(local, f.polygonMm as Pt[])) && areaDentroDoMolde(m.id, local)) useMoldes.getState().set({ semFace: { moldeId: m.id, ponto: local } })

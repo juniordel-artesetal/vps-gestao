@@ -278,3 +278,36 @@ export async function prepararFonte(f: FonteMolde, limiar = limiarPadrao(f.tipo)
   cp.getContext('2d')!.putImageData(img, 0, 0)
   return { ...prep, previa: cp.transferToImageBitmap() }
 }
+
+/**
+ * Lote 22 (item 262): cada página de um PDF gerado pelo MAE vira um PNG (300 dpi, com o DPI gravado) — a MESMA página
+ * do PDF: marca de registro, linhas (tracejado preservado) e identificação no mesmo lugar. Fundo branco ou transparente
+ * (transparente só onde não há arte: a arte precisa ter entrado no PDF como PNG).
+ */
+export async function pdfComoPngs(bytes: Uint8Array, dpi: number, transparente: boolean, aoProgredir?: (feitas: number, total: number) => void): Promise<Blob[]> {
+  const { comPhys } = await import('@/lib/mae/exportar/png')
+  const pj = await pdfjs()
+  const pdf = await abrirPdf(pj as never, bytes.slice())
+  const pxPorMm = dpi / 25.4
+  const out: Blob[] = []
+  for (let n = 1; n <= pdf.paginas; n++) {
+    const pg = await pdf.pagina(n)
+    const viewport = pg.getViewport({ scale: pxPorMm * (25.4 / 72) })
+    const c = new OffscreenCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height))
+    const g = c.getContext('2d')!
+    if (!transparente) { g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height) }
+    await pg.render({ canvasContext: g, viewport, background: transparente ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,1)' }).promise
+    const png = new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer())
+    out.push(new Blob([comPhys(png, dpi) as BlobPart], { type: 'image/png' }))
+    aoProgredir?.(n, pdf.paginas)
+  }
+  return out
+}
+
+/** Lote 22 (item 262): vários PNG num .zip (sem recomprimir — PNG já é comprimido). */
+export async function zipDosPngs(arquivos: { nome: string; blob: Blob }[]): Promise<Blob> {
+  const JSZip = (await import('jszip')).default
+  const z = new JSZip()
+  for (const a of arquivos) z.file(a.nome, a.blob)
+  return z.generateAsync({ type: 'blob', compression: 'STORE' })
+}

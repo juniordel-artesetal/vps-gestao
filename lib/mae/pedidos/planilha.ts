@@ -7,24 +7,46 @@
 //    completar na lista (a observação aparece no 💬).
 import { separarNomeIdade } from './pedidos'
 
-export const CAMPOS_PLANILHA = ['numero', 'produto', 'variacao', 'quantidade', 'dataEnvio', 'observacao', 'cliente'] as const
+// Lote 22 (item 264): colunas próprias de TEMA, NOME, IDADE e CANAL (o modelo genérico para Elo7, WhatsApp e site)
+export const CAMPOS_PLANILHA = ['numero', 'produto', 'variacao', 'quantidade', 'dataEnvio', 'observacao', 'cliente', 'tema', 'nome', 'idade', 'canal'] as const
 export type CampoPlanilha = (typeof CAMPOS_PLANILHA)[number]
 export type Mapeamento = Partial<Record<CampoPlanilha, string>>
 export const ROTULO_CAMPO: Record<CampoPlanilha, string> = {
   numero: 'Nº do pedido', produto: 'Produto', variacao: 'Variação', quantidade: 'Quantidade', dataEnvio: 'Prazo de envio', observacao: 'Observação do comprador', cliente: 'Nome do cliente',
+  tema: 'Tema', nome: 'Nome (aniversariante)', idade: 'Idade', canal: 'Canal',
 }
+/** Canais que ela pode escolher (importação e pedido manual). */
+export const CANAIS_MAE = ['Shopee', 'Elo7', 'WhatsApp', 'Site', 'Outro'] as const
+/** Colunas do MODELO genérico de planilha (botão "Baixar modelo"). */
+export const COLUNAS_MODELO = ['Pedido', 'Produto', 'Quantidade', 'Tema', 'Nome', 'Idade', 'Prazo', 'Observação', 'Canal'] as const
+export const EXEMPLO_MODELO: Record<(typeof COLUNAS_MODELO)[number], string | number> = { Pedido: '1001', Produto: 'Kit Festa', Quantidade: 10, Tema: 'Moana', Nome: 'Antonella', Idade: '5', Prazo: '25/10/2026', 'Observação': '', Canal: 'WhatsApp' }
 export const OBRIGATORIOS: CampoPlanilha[] = ['numero', 'produto']
 /** Cabeçalhos da planilha de pedidos da Shopee (os mesmos que a importação do SOA reconhece). */
 const SHOPEE: Record<CampoPlanilha, string[]> = {
-  numero: ['ID do pedido'],
-  produto: ['Nome do Produto'],
+  numero: ['ID do pedido', 'Pedido', 'Nº do pedido', 'Numero do pedido'],
+  produto: ['Nome do Produto', 'Produto'],
   variacao: ['Nome da variação', 'Nome da Variação', 'Variação', 'Variacao'],
   quantidade: ['Quantidade', 'Quantidade do Produto', 'Quantidade do produto', 'Qtd', 'Qtde'],
-  dataEnvio: ['Data prevista de envio'],
-  observacao: ['Observação do comprador'],
-  cliente: ['Nome do destinatário', 'Nome de usuário (comprador)'],
+  dataEnvio: ['Data prevista de envio', 'Prazo', 'Prazo de envio'],
+  observacao: ['Observação do comprador', 'Observação', 'Observacao'],
+  cliente: ['Nome do destinatário', 'Nome de usuário (comprador)', 'Cliente'],
+  tema: ['Tema', 'Tema da festa', 'Tema do kit'],
+  nome: ['Nome', 'Nome da criança', 'Nome do aniversariante', 'Nome personalizado', 'Nome na arte'],
+  idade: ['Idade', 'Idade da criança', 'Anos'],
+  canal: ['Canal', 'Canal de venda'],
 }
 export const ARQ_MAPEAMENTO = 'Pedidos/mapeamento-planilha.json'
+
+/** Canal escrito na planilha → um dos canais conhecidos ("elo 7" → Elo7, "zap" → WhatsApp); vazio → null. */
+export function canalDe(v: string): string | null {
+  const n = v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[\s_-]+/g, '')
+  if (!n) return null
+  if (n.startsWith('shopee')) return 'Shopee'
+  if (n.startsWith('elo7') || n === 'elo') return 'Elo7'
+  if (n.startsWith('whats') || n === 'zap' || n === 'wpp') return 'WhatsApp'
+  if (n.startsWith('site') || n.startsWith('loja')) return 'Site'
+  return v.trim().slice(0, 60)
+}
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
 
@@ -69,13 +91,13 @@ export function personalizacaoDaObs(obs: string): { TEMA?: string; NOME?: string
 }
 
 export interface PedidoDaPlanilha {
-  origem: 'shopee'; numero: string; cliente: string | null; canal: string
+  origem: 'shopee' | 'manual'; numero: string; cliente: string | null; canal: string
   itens: { nome: string; variacao: string | null; quantidade: number }[]
   dataEnvio: string | null; observacao: string | null; campos: Record<string, string>
 }
 
 /** Linhas da planilha (objetos cabeçalho → valor) → pedidos (um por nº, com os itens juntos). */
-export function pedidosDaPlanilha(linhas: Record<string, unknown>[], m: Mapeamento): { pedidos: PedidoDaPlanilha[]; ignoradas: number } {
+export function pedidosDaPlanilha(linhas: Record<string, unknown>[], m: Mapeamento, canalPadrao = 'Shopee'): { pedidos: PedidoDaPlanilha[]; ignoradas: number } {
   const col = (l: Record<string, unknown>, c: CampoPlanilha) => (m[c] ? String(l[m[c]!] ?? '').trim() : '')
   const porNumero = new Map<string, PedidoDaPlanilha>()
   let ignoradas = 0
@@ -86,14 +108,17 @@ export function pedidosDaPlanilha(linhas: Record<string, unknown>[], m: Mapeamen
     let variacao = col(l, 'variacao') || null, qtd = parseInt(col(l, 'quantidade')) || 1
     const suf = variacao ? /,(\d+)$/.exec(variacao) : null
     if (suf && Number(suf[1]) > 0) { qtd = Number(suf[1]); variacao = variacao!.slice(0, -suf[0].length).trim() || null }
+    const canal = canalDe(col(l, 'canal')) ?? canalPadrao
     const p = porNumero.get(numero) ?? {
-      origem: 'shopee' as const, numero, cliente: col(l, 'cliente') || null, canal: 'Shopee', itens: [],
+      origem: (canal === 'Shopee' ? 'shopee' : 'manual') as PedidoDaPlanilha['origem'], numero, cliente: col(l, 'cliente') || null, canal, itens: [],
       dataEnvio: m.dataEnvio ? dataDaPlanilha(l[m.dataEnvio]) : null, observacao: col(l, 'observacao') || null, campos: {},
     }
+    // colunas próprias valem mais que a observação (Lote 22, item 264)
+    for (const [c, k] of [['tema', 'TEMA'], ['nome', 'NOME'], ['idade', 'IDADE']] as const) if (col(l, c) && !p.campos[k]) p.campos[k] = col(l, c)
     p.itens.push({ nome: produto, variacao, quantidade: qtd })
     if (!p.observacao && col(l, 'observacao')) p.observacao = col(l, 'observacao')
     porNumero.set(numero, p)
   }
-  const pedidos = [...porNumero.values()].map(p => ({ ...p, campos: p.observacao ? personalizacaoDaObs(p.observacao) as Record<string, string> : {} }))
+  const pedidos = [...porNumero.values()].map(p => ({ ...p, campos: { ...(p.observacao ? personalizacaoDaObs(p.observacao) as Record<string, string> : {}), ...p.campos } }))
   return { pedidos, ignoradas }
 }

@@ -87,6 +87,9 @@ export const apiMae = {
   /** Lote 13 (item 178): estilo do texto só neste pedido (null tira). */
   estilos: (id: string, estilos: Record<string, EstiloTexto | null>) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, estilos }) }),
   /** Lote 7 (item 116): o mesmo tema em vários pedidos (null = volta ao automático). */
+  /** Lote 22 (item 263): quantidade dos itens de um pedido avulso (na ordem dos itens) */
+  qtdItens: (id: string, qtdItens: number[]) => api('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ id, qtdItens }) }),
+  qtdEmMassa: (ids: string[], quantidade: number) => api<{ atualizados: number }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ ids, quantidade }) }),
   temaEmMassa: (ids: string[], temaId: string | null) => api<{ atualizados: number }>('/api/mae/pedidos', { method: 'PATCH', body: JSON.stringify({ ids, temaId }) }),
   /** Lote 7 (itens 119/120): iniciar a etapa Impressão / marcar como impresso (SOA ou status do MAE avulso). */
   status: (ids: string[], acao: 'iniciar_impressao' | 'impresso' | 'gerado') => api<{ resumo: ResumoStatus }>('/api/mae/pedidos/status', { method: 'POST', body: JSON.stringify({ ids, acao }) }).then(r => r.resumo),
