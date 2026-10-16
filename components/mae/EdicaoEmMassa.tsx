@@ -8,6 +8,8 @@
 // produto, com a quantidade no nome (item 60: `Kit Festa/Naty_5anos_Sereia_KitFesta12.pdf`).
 import DicasMae from './Dicas'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { planoDaTela, type PlanoTela } from '@/lib/mae/pedidos/planoTela'
 import Link from 'next/link'
 import { Loader2, Download, Square, Check, AlertTriangle, XCircle, Eye, FolderOpen, RefreshCw, Palette, MessageSquare, Boxes, SlidersHorizontal, RotateCcw, X, Printer, Plus, Upload } from 'lucide-react'
 import FiltrosPedidos from './FiltrosPedidos'
@@ -349,7 +351,10 @@ export default function EdicaoEmMassa() {
   const [salvos, setSalvos] = useState<FiltroSalvo[]>([])
   const [perguntaMassa, setPerguntaMassa] = useState<{ themeId: string; temas: string[] } | null>(null)
   // Lote 7 (itens 119/120): plano (SOA completo × só MAE), etapa de Impressão do fluxo e o "iniciar impressão"
-  const [plano, setPlano] = useState<'soa' | 'mae'>('soa')
+  // Lote 22 (item 257): a conta "só MAE" vem marcada no login — os botões dela nunca dependem da consulta
+  const { data: sessao } = useSession()
+  const [planoConsulta, setPlanoConsulta] = useState<PlanoTela | null>(null)
+  const plano = planoDaTela((sessao?.user as { soMae?: boolean } | undefined)?.soMae === true, planoConsulta)
   const [etapa, setEtapa] = useState<EtapaImpressao | null | undefined>(undefined)
   const [semEtapaDispensado, setSemEtapaDispensado] = useState(false)
   const [msgStatus, setMsgStatus] = useState<string | null>(null)
@@ -365,7 +370,7 @@ export default function EdicaoEmMassa() {
     setCarregando(true); setErro(null)
     try {
       const [ts, vs, ps, et] = await Promise.all([temasDisponiveis(raiz), apiMae.vinculos().catch(() => []), apiMae.pedidos(), apiMae.etapaImpressao().catch(() => null)])
-      if (et) { setPlano(et.plano); setEtapa(et.etapa) }
+      if (et) { setPlanoConsulta(et.plano); setEtapa(et.etapa) }
       if (raiz) setSalvos(lerFiltrosSalvos(await ler(raiz, ARQ_FILTROS).then(f => f.text()).catch(() => null)))
       if (raiz) {
         await carregarMarcas(raiz).catch(() => null)
