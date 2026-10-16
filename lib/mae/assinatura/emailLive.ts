@@ -56,7 +56,8 @@ export async function destinosLive(): Promise<Destino[]> {
     ORDER BY w."createdAt"`
   const vistos = new Set<string>(), out: Destino[] = []
   for (const l of linhas) {
-    if (!l.email.includes('@') || vistos.has(l.email) || l.email.endsWith('@usesoa.com.br')) continue
+    // endereço de teste (example.com, .test…) faz o Resend recusar o LOTE inteiro — fica de fora
+    if (!l.email.includes('@') || vistos.has(l.email) || l.email.endsWith('@usesoa.com.br') || /@(example\.(com|org|net)|[^@]*\.(test|invalid|local|example))$/.test(l.email)) continue
     vistos.add(l.email); out.push(l)
   }
   return out
@@ -86,6 +87,9 @@ export async function dispararEmailLive(o: { seco?: boolean; agora?: Date } = {}
       return { from: REMETENTE, to: [d.email], subject: assunto, html }
     })
     const ids = reservados.map(x => x.id)
+    const enviarUm = (c: (typeof corpo)[number]) => fetch('https://api.resend.com/emails', {
+      method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(c),
+    })
     try {
       const res = await fetch('https://api.resend.com/emails/batch', {
         method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
@@ -94,9 +98,14 @@ export async function dispararEmailLive(o: { seco?: boolean; agora?: Date } = {}
       await prisma.$executeRaw`UPDATE "AssinaturaAviso" SET "enviadoEm" = NOW() WHERE "id" = ANY(${ids})`
       r.enviados += reservados.length
     } catch (e) {
-      await prisma.$executeRaw`DELETE FROM "AssinaturaAviso" WHERE "id" = ANY(${ids}) AND "enviadoEm" IS NULL`.catch(() => {})
-      r.falhas += reservados.length
-      console.error(`[MAE LIVE] lote ${i / LOTE + 1} falhou:`, (e as Error).message)
+      // um endereço ruim derruba o lote inteiro no Resend: manda um a um (só o ruim fica de fora)
+      console.error(`[MAE LIVE] lote ${i / LOTE + 1} falhou — mandando um a um:`, (e as Error).message)
+      for (let k = 0; k < reservados.length; k++) {
+        const ok = await enviarUm(corpo[k]).then(x => x.ok).catch(() => false)
+        if (ok) { await prisma.$executeRaw`UPDATE "AssinaturaAviso" SET "enviadoEm" = NOW() WHERE "id" = ${reservados[k].id}`; r.enviados++ }
+        else { await prisma.$executeRaw`DELETE FROM "AssinaturaAviso" WHERE "id" = ${reservados[k].id} AND "enviadoEm" IS NULL`.catch(() => {}); r.falhas++ }
+        await new Promise(x => setTimeout(x, 250))
+      }
     }
     await new Promise(x => setTimeout(x, 700))
   }
