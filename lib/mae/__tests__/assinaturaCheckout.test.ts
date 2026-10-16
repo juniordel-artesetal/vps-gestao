@@ -37,11 +37,11 @@ describe('criarCheckoutMae', () => {
     expect(c.corpo!.subscription).toBeUndefined(); expect(c.corpo!.maxInstallmentCount).toBeUndefined()
     expect((c.corpo!.items as { value: number }[])[0].value).toBe(calcularParcelamentoAnual(12, 383).total)
   })
-  it('anual À VISTA e mensal continuam RECORRENTES (renovam sozinhos), 1ª cobrança hoje; nome do item ≤ 30 caracteres', async () => {
+  it('anual À VISTA = Pix ou cartão 1× (compra avulsa, nunca boleto); mensal = só cartão recorrente; nome do item ≤ 30', async () => {
     const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
-    const { hojeSP } = await import('@/lib/mae/assinatura/precos')
     await criarCheckoutMae({ workspaceId: 'ws7', ciclo: 'anual', parcelas: 1, baseUrl: 'https://x' })
-    expect(chamadas[0].corpo).toMatchObject({ chargeTypes: ['RECURRENT'], subscription: { cycle: 'YEARLY', nextDueDate: hojeSP() } })
+    expect(chamadas[0].corpo).toMatchObject({ billingTypes: ['CREDIT_CARD', 'PIX'], chargeTypes: ['DETACHED'] })
+    expect(chamadas[0].corpo!.subscription).toBeUndefined(); expect(JSON.stringify(chamadas[0].corpo)).not.toContain('BOLETO')
     expect((chamadas[0].corpo!.items as { value: number }[])[0].value).toBe(383)
     for (const it of chamadas.map(c => (c.corpo!.items as { name: string }[])[0])) expect(it.name.length).toBeLessThanOrEqual(30)
   })

@@ -56,7 +56,7 @@ export function montarEmailLancamento(v: VarianteLancamento, nome: string | null
     v === 'ativa' ? 'Método Mãe no seu SOA' : 'Só o Método Mãe',
     v === 'ativa' ? 'Soma à sua assinatura do SOA (é uma cobrança separada; o SOA continua como está).' : 'Para usar só o Método Mãe, sem o resto do SOA. Seus dados continuam guardados.',
     btn(`Mensal — ${brl(p[pl].mensal)}/mês`, linkDoPlano(o, 'mensal'))
-      + btn(`Anual — ${brl(p[pl].anual)} à vista`, linkDoPlano(o, 'anual', 1), false)
+      + btn(`Anual — ${brl(p[pl].anual)} à vista (Pix ou cartão)`, linkDoPlano(o, 'anual', 1), false)
       + btn(`Anual em até 12× — 12× de ${brl(doze.valorParcela)} (com juros)`, linkDoPlano(o, 'anual', 12), false))
   const combo = v === 'inativa' ? caixa('SOA + Método Mãe', `Volte ao SOA completo e some o Método Mãe: ${brl(soa.mensal + p.addon.mensal)}/mês (SOA ${brl(soa.mensal)} + Método Mãe ${brl(p.addon.mensal)}) ou ${brl(soa.anual + p.addon.anual)}/ano. Primeiro você regulariza o SOA; depois, é só ativar o Método Mãe no Hub de módulos.`,
     btn('Voltar ao SOA + Método Mãe', `${SITE}/assinatura`, false)) : ''
@@ -65,7 +65,7 @@ export function montarEmailLancamento(v: VarianteLancamento, nome: string | null
     <p style="font-size:16px">${primeiro ? `Oi, ${primeiro}!` : 'Oi!'} 💛</p>
     <p style="font-size:18px"><b>Chegou o Método Mãe</b> — o jeito de produzir as artes personalizadas dos seus pedidos sem perder noites no computador.</p>
     <ul style="padding-left:20px">${lista}</ul>
-    <p style="margin-top:18px;font-weight:700">Escolha o seu plano (o pagamento é no cartão, na página segura do Asaas):</p>
+    <p style="margin-top:18px;font-weight:700">Escolha o seu plano (pagamento na página segura do Asaas — mensal no cartão; anual à vista no Pix ou no cartão, ou em até 12× no cartão):</p>
     ${planosMae}
     ${combo}
     <p style="font-size:14px;color:#6b7280">No anual parcelado, na página de pagamento escolha <b>12×</b> em “Selecione o parcelamento” — o valor já inclui os juros. Cancele quando quiser, pela própria tela da assinatura.</p>

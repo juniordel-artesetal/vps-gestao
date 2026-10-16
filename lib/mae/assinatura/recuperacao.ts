@@ -46,7 +46,7 @@ export function montarEmailRecuperacao(etapa: EtapaRecuperacao, d: DadosRecupera
   const ciclo = d.ciclo ?? 'mensal'
   const c = cobrancaMae(p, d.plano, ciclo, d.parcelas)
   const qual = d.plano === 'addon' ? 'Método Mãe no seu SOA' : 'Método Mãe'
-  const preco = ciclo === 'mensal' ? `${brl(c.total)}/mês` : c.parcelas > 1 ? `${c.parcelas}× de ${brl(c.valorParcela)} (1 ano)` : `${brl(c.total)} por 1 ano`
+  const preco = ciclo === 'mensal' ? `${brl(c.total)}/mês` : c.parcelas > 1 ? `${c.parcelas}× de ${brl(c.valorParcela)} (1 ano)` : `${brl(c.total)} por 1 ano (Pix ou cartão)`
   const escolhido = d.ciclo ? `<p style="background:#fff7ed;border-radius:10px;padding:10px 14px">Seu plano: <b>${qual} — ${preco}</b>${d.plano === 'addon' ? ' (soma à sua assinatura do SOA)' : ''}.</p>`
     : `<p style="background:#fff7ed;border-radius:10px;padding:10px 14px">Planos: <b>${brl(pr.mensal)}/mês</b> ou <b>${brl(pr.anual)} por 1 ano</b> (ou em até 12× com juros).</p>`
   const botao = (t: string) => `<p style="text-align:center;margin:24px 0"><a href="${linkRetomar(d)}" style="background:#f97316;color:#fff;text-decoration:none;padding:13px 26px;border-radius:10px;font-weight:600">${t}</a></p>`

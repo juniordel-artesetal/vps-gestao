@@ -124,17 +124,18 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
             <button onClick={() => setCiclo('anual')} className={`rounded-2xl border-2 p-4 text-left relative ${ciclo === 'anual' ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700'}`} data-ciclo-mae="anual">
               {e.economiaAnual ? <span className="absolute -top-2 right-3 rounded-full bg-emerald-600 text-white text-[11px] font-semibold px-2 py-0.5" data-economia-mae>economize {e.economiaAnual}%</span> : null}
               <p className="text-sm text-gray-500">{rotuloCiclo('anual')}</p>
-              <p className="text-2xl font-bold">{mais}{brl(e.precos.anual)}<span className="text-sm font-normal text-gray-500"> à vista</span></p>
+              <p className="text-2xl font-bold">{mais}{brl(e.precos.anual)}<span className="text-sm font-normal text-gray-500"> à vista no Pix ou cartão</span></p>
               <p className="text-xs text-gray-500">ou até 12× de {brl(e.parcelamentoAnual[11]?.valorParcela ?? 0)} no cartão</p>
             </button>
           </div>
           {ciclo === 'anual' && (
             <label className="block text-sm">Parcelas no cartão
               <select value={parcelas} onChange={x => setParcelas(Number(x.target.value))} className="mt-1 w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2" data-parcelas-mae>
-                {e.parcelamentoAnual.map(p => <option key={p.parcelas} value={p.parcelas}>{p.parcelas === 1 ? `1× de ${brl(p.total)} (à vista)` : `${p.parcelas}× de ${brl(p.valorParcela)} — total ${brl(p.total)} (com juros)`}</option>)}
+                {e.parcelamentoAnual.map(p => <option key={p.parcelas} value={p.parcelas}>{p.parcelas === 1 ? `À vista: ${brl(p.total)} (Pix ou cartão)` : `${p.parcelas}× de ${brl(p.valorParcela)} — total ${brl(p.total)} (com juros)`}</option>)}
               </select>
             </label>
           )}
+          {ciclo === 'anual' && parcelas === 1 && <p className="text-xs text-gray-500" data-aviso-anual-avista>Anual à vista no Pix ou no cartão (1×). Vale por 1 ano e não renova sozinho: no fim do ano, é só assinar de novo.</p>}
           {/* pente-fino 16/10/2026: no Asaas, a lista de parcelas abre em "1x" e não dá para travar — avisamos */}
           {ciclo === 'anual' && parcelas > 1 && parc && (
             <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-aviso-parcelas-asaas>
@@ -144,7 +145,7 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
           )}
           <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 px-4 py-3 text-sm text-gray-600 dark:text-gray-300 space-y-1">
             {!a?.trialUsado && e.trialDias > 0 && <p className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> <b>{e.trialDias} dias grátis</b> — a 1ª cobrança só vem no fim do teste (cancele antes e não paga nada).</p>}
-            <p className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> Cartão de crédito, na página segura do Asaas{e.trialDias > 0 ? '. Para validar o cartão fazemos uma reserva de R$ 5,00 que é liberada na hora.' : '. A 1ª cobrança é feita na hora; cancele quando quiser, sem novas cobranças.'}</p>
+            <p className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> {ciclo === 'anual' && parcelas === 1 ? 'Pix ou cartão de crédito' : 'Cartão de crédito'}, na página segura do Asaas{e.trialDias > 0 ? '. Para validar o cartão fazemos uma reserva de R$ 5,00 que é liberada na hora.' : '. A 1ª cobrança é feita na hora; cancele quando quiser, sem novas cobranças.'}</p>
             {!standalone && <p className="text-xs text-gray-500">O Método Mãe é cobrado à parte e soma à sua assinatura do SOA (mensal ou anual, como já está). Vale enquanto o SOA estiver ativo.</p>}
           </div>
           <button onClick={() => void assinar()} disabled={indo} className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-3 font-semibold disabled:opacity-50" data-assinar-mae>
@@ -154,11 +155,11 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
         </div>
       )}
       {/* anual parcelado = compra no cartão (as parcelas seguem na fatura); não renova sozinho — nada a cancelar */}
-      {a && a.status === 'ATIVA' && a.ciclo === 'anual' && a.parcelas > 1 && (
-        <p className="pt-4 border-t border-gray-100 dark:border-gray-800 text-sm text-gray-500" data-mae-anual-parcelado>Plano anual em {a.parcelas}× no cartão · não renova sozinho{e.acesso.ate ? <> · acesso até <b>{dia(e.acesso.ate)}</b></> : null}.</p>
+      {a && a.status === 'ATIVA' && a.ciclo === 'anual' && (
+        <p className="pt-4 border-t border-gray-100 dark:border-gray-800 text-sm text-gray-500" data-mae-anual-parcelado>Plano anual{a.parcelas > 1 ? ` em ${a.parcelas}× no cartão` : ' à vista'} · não renova sozinho{e.acesso.ate ? <> · acesso até <b>{dia(e.acesso.ate)}</b></> : null}.</p>
       )}
       {/* cancelar pela tela (nada é estornado; o acesso segue até o fim do teste/período pago) */}
-      {a && ['TRIAL', 'ATIVA', 'INADIMPLENTE'].includes(a.status) && !(a.ciclo === 'anual' && a.parcelas > 1) && (
+      {a && ['TRIAL', 'ATIVA', 'INADIMPLENTE'].includes(a.status) && a.ciclo !== 'anual' && (
         <div className="pt-4 border-t border-gray-100 dark:border-gray-800 text-sm text-gray-500 flex flex-wrap items-center gap-2">
           <span className="flex-1">{a.ciclo === 'anual' ? 'Plano anual' : 'Plano mensal'}{a.valor ? ` · ${a.parcelas > 1 ? `${a.parcelas}× de ${brl(Math.round((a.valor / a.parcelas) * 100) / 100)}` : brl(a.valor)}` : ''}</span>
           <button onClick={() => void cancelar()} disabled={cancelando} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-gray-600 hover:border-red-300 hover:text-red-600 disabled:opacity-50" data-cancelar-mae>

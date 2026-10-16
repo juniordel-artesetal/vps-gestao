@@ -182,3 +182,9 @@ A página hospedada tem reCAPTCHA: a assinatura ou compra que ela cria é feita 
 - quem abriu o pagamento e não pagou, ou criou a conta só-MAE sem assinar, recebe 3 e-mails: 1 h, 24 h e 72 h;
 - idempotente (`AssinaturaAviso` `MAE_RECUP_<n>`, dia = início da tentativa); respeita o opt-out;
 - para sozinho ao pagar; desliga com `MAE_RECUPERACAO=off`.
+
+**Formas de pagamento (decisão do Júnior, 16/10):** boleto nunca.
+- **Mensal:** só cartão, recorrente (cobra sozinho todo mês).
+- **Anual à vista:** **Pix ou cartão 1×**, compra avulsa (`DETACHED` com `CREDIT_CARD` + `PIX`; o Asaas não aceita Pix em recorrente). Não renova sozinho.
+- **Anual em até 12×:** cartão com juros (`DETACHED` + `INSTALLMENT`).
+- No anual, o `CHECKOUT_PAID` **não libera** (no Pix, o checkout fecha antes do pagamento). O acesso vem só com o `PAYMENT_CONFIRMED`/`RECEIVED`. Quem não paga o Pix fica `AGUARDANDO_PAGAMENTO` e entra na recuperação de vendas.

@@ -75,7 +75,7 @@ export function descricaoDoItemMae(plano: PlanoMaeVenda, ciclo: CicloMae, c: { p
   const quem = plano === 'standalone' ? 'Método Mãe (sem o SOA)' : 'Método Mãe p/ quem assina o SOA, à parte do SOA'
   const preco = ciclo === 'mensal' ? `${brlTxt(c.total)}/mês. Cancele quando quiser.`
     : c.parcelas > 1 ? `1 ano em ${c.parcelas}x de ${brlTxt(c.valorParcela)} (total ${brlTxt(c.total)} c/ juros). Escolha ${c.parcelas}x no parcelamento.`
-      : `1 ano por ${brlTxt(c.total)} à vista. Renova todo ano.`
+      : `1 ano por ${brlTxt(c.total)} à vista, no Pix ou no cartão.`
   return `${quem}: ${preco}`.slice(0, 150)
 }
 
@@ -147,15 +147,17 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
   //    total com juros da tabela Price; não renova sozinho (no fim do ano, renovar). Mensal e anual 1× seguem recorrentes.
   const nome = nomeDoItemMae(plano, p.ciclo)
   const parcelado = p.ciclo === 'anual' && cobr.parcelas > 1
+  // Decisão do Júnior (16/10): ANUAL À VISTA = Pix ou cartão 1× (compra avulsa — o Asaas não aceita Pix em recorrente;
+  // não renova sozinho); ANUAL EM N× = cartão com juros; MENSAL = só cartão (recorrente). Nunca boleto.
+  const anual = p.ciclo === 'anual'
   const corpo: Record<string, unknown> = {
-    billingTypes: ['CREDIT_CARD'], chargeTypes: parcelado ? ['DETACHED', 'INSTALLMENT'] : ['RECURRENT'], minutesToExpire: 1440,
+    billingTypes: anual && !parcelado ? ['CREDIT_CARD', 'PIX'] : ['CREDIT_CARD'],
+    chargeTypes: parcelado ? ['DETACHED', 'INSTALLMENT'] : anual ? ['DETACHED'] : ['RECURRENT'], minutesToExpire: 1440,
     callback: { successUrl: `${p.baseUrl}/mae/assinatura?pago=1`, cancelUrl: `${p.baseUrl}/mae/assinatura`, expiredUrl: `${p.baseUrl}/mae/assinatura` },
     // o item JÁ é o total com juros (tabela Price) — NÃO ligar "repassar juros ao cliente" no Asaas
     items: [{ name: nome, description: descricaoDoItemMae(plano, p.ciclo, cobr), quantity: 1, value: cobr.total }],
     externalReference: refAssinaturaMae(p.workspaceId),
-    ...(parcelado
-      ? { installment: { maxInstallmentCount: cobr.parcelas } }
-      : { subscription: { cycle: p.ciclo === 'anual' ? 'YEARLY' : 'MONTHLY', nextDueDate: primeira } }),
+    ...(parcelado ? { installment: { maxInstallmentCount: cobr.parcelas } } : anual ? {} : { subscription: { cycle: 'MONTHLY', nextDueDate: primeira } }),
   }
   const r = await chamarAsaas<{ id?: string; link?: string }>('/checkouts', { metodo: 'POST', corpo })
   if (!r.ok || !r.dados?.id || !r.dados?.link) {
@@ -197,6 +199,12 @@ export async function concluirCheckoutMae(checkoutId: string): Promise<boolean> 
   const a = await linhaPorCheckout(checkoutId)
   if (!a) return false
   if (a.status !== 'AGUARDANDO_PAGAMENTO') return true   // webhook repetido
+  // anual (compra avulsa — Pix pode "fechar" o checkout antes de ser pago): espera o PAYMENT_CONFIRMED/RECEIVED;
+  // a assinatura segue AGUARDANDO_PAGAMENTO (a recuperação de vendas lembra quem não pagou o Pix)
+  if (a.ciclo === 'anual') {
+    await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "checkoutLink" = NULL WHERE "id" = ${a.id} AND "status" = 'AGUARDANDO_PAGAMENTO'`
+    return true
+  }
   const comTrial = TRIAL_DIAS_MAE > 0 && !a.trialUsado
   // sem teste, a 1ª cobrança já é no checkout: a reserva de R$ 5 (validar o cartão) só existe com o teste
   const v = comTrial ? await validarCartaoDoCheckout(a.workspaceId, checkoutId, refAssinaturaMae(a.workspaceId)) : { libera: true }

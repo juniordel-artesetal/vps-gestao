@@ -215,7 +215,7 @@ export default function PaginaMae() {
       <section id="planos" className="scroll-mt-16 bg-[#2b211b] text-[#fbeee3]">
         <div className="mx-auto max-w-6xl px-4 py-16">
           <h2 className="disp text-4xl font-extrabold text-white sm:text-5xl">Escolha o seu plano</h2>
-          <p className="mt-3 max-w-2xl text-lg text-[#e7cdb8]">Clique no preço e vá direto para o pagamento, no cartão, na página segura do Asaas. Cancele quando quiser, pela própria tela da assinatura.</p>
+          <p className="mt-3 max-w-2xl text-lg text-[#e7cdb8]">Clique no preço e vá direto para o pagamento, na página segura do Asaas: mensal no cartão; anual à vista no Pix ou no cartão, ou em até 12× no cartão. Cancele quando quiser, pela própria tela da assinatura.</p>
           {!planos ? (
             <p className="mt-8 rounded-2xl bg-white/10 p-6 text-lg">Os planos estarão aqui em instantes. Volte em alguns minutos.</p>
           ) : (
@@ -299,7 +299,7 @@ function Plano(p: {
           <p className="text-xs font-bold uppercase tracking-wider text-[#9a8677]">Anual</p>
           <Cta href={pagar(p.o, 'anual', 1)} botao={`preco-${p.o}-anual-avista`} className="group block">
             <p className="disp mt-1 text-[1.7rem] font-extrabold leading-none [font-variant-numeric:tabular-nums] group-hover:text-[#c2410c]">{brl(p.anual)}</p>
-            <p className="mt-1 text-sm font-bold text-[#c2410c] group-hover:underline">à vista →</p>
+            <p className="mt-1 text-sm font-bold text-[#c2410c] group-hover:underline">à vista, Pix ou cartão →</p>
           </Cta>
           <Cta href={pagar(p.o, 'anual', 12)} botao={`preco-${p.o}-anual-12x`} className="mt-2 block text-sm font-bold text-[#c2410c] hover:underline">{p.rotulo12 ?? 'ou 12× de'} {brl(p.doze)} →</Cta>
         </div>
