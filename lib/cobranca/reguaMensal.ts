@@ -1,6 +1,7 @@
 // RÉGUA DAS MENSALIDADES (16/10/2026, pedido do Júnior) — vale para TODAS as soluções mensais pagas no Asaas:
 // SOA, Método Mãe, Pessoal e Marketplaces.
 //   • ANTES de vencer: lembrete 5, 3 e 1 dia antes e no dia (no cartão, que cobra sozinho: só 5 dias antes e no dia);
+//     no Pix avulso do SOA, o da véspera convida a cadastrar o PIX AUTOMÁTICO (mesmo valor; o avulso é cancelado sozinho);
 //   • em ATRASO: e-mail no D+1 e no D+3 (último dia com acesso);
 //   • D+4: o acesso é BLOQUEADO (tolerância de 3 dias — as carências dos 4 produtos são 3) e sai o e-mail avisando;
 //   • depois: cobrança o mês todo (D+7, D+10 … D+28) e, passado o mês, uma vez por semana enquanto a assinatura
@@ -14,6 +15,7 @@ import crypto from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { URL_SOA } from '@/lib/baseUrl'
+import { pixAutoLigado } from '@/lib/pagamento/asaas/linkPixAuto'
 
 const REMETENTE = 'Equipe SOA <suporte@vps-gestao.com.br>'
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }).replace(/ /g, ' ')
@@ -79,7 +81,16 @@ export interface ItemEmail {
   /** O acesso a este produto já está bloqueado (no BLOQUEIO/COBRANCA). */
   bloqueado: boolean
   paymentId: string
+  /** Véspera do vencimento de um Pix "manual" do SOA: o e-mail convida a cadastrar o Pix Automático (pedido do Júnior, 16/10). */
+  convitePixAuto?: boolean
 }
+
+/** Página que abre o Pix Automático do SOA (pede login se preciso). */
+export const LINK_PIX_AUTO = `${URL_SOA}/assinatura/pix-automatico`
+
+/** Véspera (D-1) de uma mensalidade do SOA paga no Pix avulso (não no cartão, não já no Pix Automático). Puro. */
+export const deveConvidarPixAuto = (produto: Produto, diasParaVencer: number, billingType: string | undefined, paymentLink: string | null | undefined) =>
+  produto === 'SOA' && diasParaVencer === 1 && billingType !== 'CREDIT_CARD' && !paymentLink
 
 function linhaDoItem(i: ItemEmail): string {
   const nome = `<b>${NOME_PRODUTO[i.produto]}</b> — ${brl(i.valor)}`
@@ -103,8 +114,14 @@ export function montarEmailMensal(nome: string | null, itens: ItemEmail[]): { as
   const primeiro = nome ? esc(String(nome).trim().split(/\s+/)[0]) : ''
   const todosNoCartao = itens.every(i => i.noCartao)
   let assunto: string, abre: string
+  const convite = itens.find(i => i.convitePixAuto && i.etapa === 'LEMBRETE')
   switch (pior.etapa) {
     case 'LEMBRETE':
+      if (convite) {
+        assunto = 'Amanhã vence seu Pix do SOA — que tal nunca mais precisar lembrar?'
+        abre = `Amanhã vence a sua mensalidade do SOA (${brl(convite.valor)}). Em vez de pagar o Pix todo mês, cadastre o <b>Pix Automático</b>: você autoriza <b>uma vez</b> no app do seu banco e a mensalidade é debitada sozinha, sem cartão — e sem risco de esquecer e ficar sem acesso.`
+        break
+      }
       assunto = pior.diasParaVencer === 0 ? `Sua mensalidade ${um ? `do ${qual} ` : ''}vence hoje` : `Lembrete: sua mensalidade ${um ? `do ${qual} ` : ''}vence em ${dia(pior.vencimento)}`
       abre = todosNoCartao
         ? 'Passando para lembrar da sua mensalidade. A cobrança é <b>automática no cartão</b> — não precisa fazer nada. Se trocou de cartão ou ele estiver perto do limite, atualize antes para não ficar sem acesso.'
@@ -133,8 +150,11 @@ export function montarEmailMensal(nome: string | null, itens: ItemEmail[]): { as
   <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:520px;margin:0 auto;color:#1f2937;line-height:1.55">
     <p style="font-size:16px">${primeiro ? `Oi, ${primeiro}!` : 'Oi!'}</p>
     <p>${abre}</p>
+    ${convite ? `<p style="text-align:center;margin:24px 0"><a href="${LINK_PIX_AUTO}" style="background:#f97316;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:600">Cadastrar o Pix Automático</a></p>
+    <ul style="padding-left:18px;color:#374151;font-size:14px"><li>O valor continua o mesmo: <b>${brl(convite.valor)}/mês</b>.</li><li>A mensalidade de amanhã já sai pelo Pix Automático, e o Pix avulso é cancelado sozinho — <b>não pague os dois</b>.</li><li>Cancela quando quiser, pelo próprio banco ou pelo SOA.</li></ul>
+    <p style="color:#6b7280;font-size:14px">Prefere continuar como está? Tudo bem — é só pagar o Pix de amanhã normalmente:</p>` : ''}
     <ul style="padding-left:18px">${lista}</ul>
-    ${um ? `<p style="text-align:center;margin:24px 0"><a href="${linkFatura(pior.paymentId)}" style="background:#f97316;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:600">${pior.etapa === 'LEMBRETE' && pior.noCartao ? 'Ver a fatura' : 'Pagar agora'}</a></p>` : ''}
+    ${um && !convite ? `<p style="text-align:center;margin:24px 0"><a href="${linkFatura(pior.paymentId)}" style="background:#f97316;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:600">${pior.etapa === 'LEMBRETE' && pior.noCartao ? 'Ver a fatura' : 'Pagar agora'}</a></p>` : ''}
     ${emAtraso ? `<p style="color:#6b7280;font-size:14px">Se não quer mais continuar, é só cancelar em <a href="${URL_SOA}${PAGINA_PRODUTO[pior.produto]}" style="color:#6b7280">Minha assinatura</a> — aí paramos de mandar estes lembretes. Se você já pagou, responda este e-mail que conferimos na hora.</p>` : '<p style="color:#6b7280;font-size:14px">Se você já pagou, pode ignorar este e-mail. Qualquer dúvida, é só responder.</p>'}
     <p style="margin-top:20px">Com carinho,<br><b>Equipe SOA</b></p>
   </div>`.trim()
@@ -248,14 +268,14 @@ const diasEntre = (de: string, ate: string) => Math.round((Date.parse(ate + 'T12
 
 export interface ResultadoRegua {
   hoje: string; cobrancas: number; nossas: number; porEtapa: Record<string, number>; porProduto: Record<string, number>
-  emails: number; enviados: number; falhas: number; bloqueadosMkt: number; ignoradasEmDia: number; seco: boolean; erro?: string
+  emails: number; enviados: number; falhas: number; bloqueadosMkt: number; ignoradasEmDia: number; convitesPixAuto: number; seco: boolean; erro?: string
   previa?: { workspaceId: string; produto: Produto; etapa: Etapa; dias: number; bloqueado: boolean }[]
 }
 
 /** Roda a régua do dia. `seco`: só calcula (nada é enviado nem bloqueado). */
 export async function rodarReguaMensal(o: { seco?: boolean; agora?: Date } = {}): Promise<ResultadoRegua> {
   const hoje = hojeSP(o.agora)
-  const r: ResultadoRegua = { hoje, cobrancas: 0, nossas: 0, porEtapa: {}, porProduto: {}, emails: 0, enviados: 0, falhas: 0, bloqueadosMkt: 0, ignoradasEmDia: 0, seco: !!o.seco }
+  const r: ResultadoRegua = { hoje, cobrancas: 0, nossas: 0, porEtapa: {}, porProduto: {}, emails: 0, enviados: 0, falhas: 0, bloqueadosMkt: 0, ignoradasEmDia: 0, convitesPixAuto: 0, seco: !!o.seco }
   if (!reguaMensalLigada()) return { ...r, erro: 'REGUA_MENSAL=off' }
 
   const pendentes = await listarCobrancas('PENDING', hoje, somar(hoje, 5))
@@ -288,7 +308,9 @@ export async function rodarReguaMensal(o: { seco?: boolean; agora?: Date } = {})
     r.porProduto[dona.produto] = (r.porProduto[dona.produto] ?? 0) + 1
     const chave = `${dona.workspaceId}|${dona.userId ?? ''}`
     const g = grupos.get(chave) ?? { dona, itens: [] }
-    g.itens.push({ produto: dona.produto, etapa, valor: Number(c.value), vencimento: c.dueDate, diasParaVencer: dias, noCartao: c.billingType === 'CREDIT_CARD', bloqueado: dona.bloqueado, paymentId: c.id })
+    g.itens.push({ produto: dona.produto, etapa, valor: Number(c.value), vencimento: c.dueDate, diasParaVencer: dias, noCartao: c.billingType === 'CREDIT_CARD', bloqueado: dona.bloqueado, paymentId: c.id,
+      convitePixAuto: etapa === 'LEMBRETE' && pixAutoLigado() && deveConvidarPixAuto(dona.produto, dias, c.billingType, c.paymentLink) })
+    if (g.itens[g.itens.length - 1].convitePixAuto) r.convitesPixAuto++
     grupos.set(chave, g)
   }
   r.emails = grupos.size

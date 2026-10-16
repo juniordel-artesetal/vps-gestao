@@ -1,7 +1,7 @@
 // Régua das mensalidades (16/10/2026, pedido do Júnior): lembrete 5/3/1 dia antes e no dia, cobrança em atraso,
 // bloqueio depois de 3 dias, cobrança o mês todo e depois semanal — para SOA, Método Mãe, Pessoal e Marketplaces.
 import { describe, it, expect } from 'vitest'
-import { etapaDaCobranca, montarEmailMensal, tokenFatura, tokenFaturaValido, TOLERANCIA_ATRASO_DIAS, type ItemEmail } from '@/lib/cobranca/reguaMensal'
+import { etapaDaCobranca, montarEmailMensal, tokenFatura, tokenFaturaValido, TOLERANCIA_ATRASO_DIAS, deveConvidarPixAuto, LINK_PIX_AUTO, type ItemEmail } from '@/lib/cobranca/reguaMensal'
 import { DIAS_CARENCIA } from '@/lib/assinatura'
 import { CARENCIA_DIAS_MAE } from '@/lib/mae/assinatura/precos'
 import { CARENCIA_DIAS } from '@/lib/pessoal/assinatura'
@@ -51,3 +51,23 @@ describe('o e-mail', () => {
     expect(tokenFaturaValido('pay_abc124', tokenFatura('pay_abc123'))).toBe(false)
   })
 })
+
+describe('convite para o Pix Automático (véspera do Pix avulso do SOA)', () => {
+  it('só SOA, só D-1, só Pix avulso (nem cartão, nem quem já está no Pix Automático)', () => {
+    expect(deveConvidarPixAuto('SOA', 1, 'PIX', null)).toBe(true)
+    expect(deveConvidarPixAuto('SOA', 1, 'UNDEFINED', null)).toBe(true)
+    expect(deveConvidarPixAuto('SOA', 3, 'PIX', null)).toBe(false)
+    expect(deveConvidarPixAuto('SOA', 1, 'CREDIT_CARD', null)).toBe(false)
+    expect(deveConvidarPixAuto('SOA', 1, 'PIX', 'lnk1')).toBe(false)
+    expect(deveConvidarPixAuto('PESSOAL', 1, 'PIX', null)).toBe(false)
+  })
+  it('o e-mail convida, com o MESMO valor, o aviso de não pagar os dois e o Pix de amanhã como alternativa', () => {
+    const r = montarEmailMensal('Ana', [{ produto: 'SOA', etapa: 'LEMBRETE', valor: 29.9, vencimento: '2026-10-17', diasParaVencer: 1, noCartao: false, bloqueado: false, paymentId: 'pay_1', convitePixAuto: true }])
+    const h = r.html.replace(/ /g, ' ')
+    expect(r.assunto).toMatch(/Pix Automático|nunca mais precisar lembrar/)
+    expect(h).toContain(LINK_PIX_AUTO); expect(LINK_PIX_AUTO).toBe('https://www.usesoa.com.br/assinatura/pix-automatico')
+    expect(h).toContain('R$ 29,90/mês'); expect(h).toContain('não pague os dois')
+    expect(h).toContain(tokenFatura('pay_1'))
+  })
+})
+

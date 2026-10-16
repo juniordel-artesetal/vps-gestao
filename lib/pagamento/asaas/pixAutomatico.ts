@@ -157,6 +157,9 @@ export async function encerrarAssinaturasTrocadasPorPixAuto(workspaceId: string,
       await prisma.$executeRaw`
         UPDATE "AsaasAssinatura" SET "status" = 'CANCELADA', "canceladaEm" = NOW(), "canceladaPor" = 'troca-pix-auto',
           "canceladaMotivo" = 'trocada pelo Pix Automático', "updatedAt" = NOW() WHERE "subscriptionId" = ${subscriptionId}`
+      // a mensalidade AVULSA em aberto (o Pix "manual" deste mês) sai antes: o 1º Pix Automático já pagou o mês
+      const pend = await chamarAsaas<{ data?: { id: string }[] }>(`/subscriptions/${subscriptionId}/payments?status=PENDING&limit=20`)
+      for (const p of pend.dados?.data ?? []) await chamarAsaas(`/payments/${p.id}`, { metodo: 'DELETE' })
       const r = await chamarAsaas(`/subscriptions/${subscriptionId}`, { metodo: 'DELETE' })
       if (r.ok || r.status === 404) n++
       else console.error(`[PIX AUTO] não consegui encerrar a assinatura antiga ${subscriptionId} ws=${workspaceId}: ${r.erro}`)

@@ -50,3 +50,18 @@ de 3 dias de atraso. O Pix Automático vale para o mensal do MAE e do SOA.
   - Se ela tinha uma assinatura no cartão (recusado), essa assinatura é **encerrada** no Asaas, para não haver cobrança dupla. Isso não cancela a conta.
 - **Desligar:** `PIX_AUTO=off`.
 - **A confirmar:** o 1º pagamento real. É preciso conferir que o webhook liga a conta, o que pode ser visto em `[ASAAS-WH] pix-auto (link) ativado` / `[MAE ASSINATURA] pago`.
+
+## Convite para o Pix Automático (16/10/2026, pedido do Júnior)
+
+**Quem recebe:** quem paga o SOA mensal no **Pix avulso** (62 assinantes, 57 a R$ 29,90). Na véspera do vencimento (D-1), o lembrete vira um convite para cadastrar o Pix Automático. O botão leva a `/assinatura/pix-automatico`, que pede login se for preciso.
+
+**Valor:**
+- O valor continua **o mesmo** da assinatura atual (grandfather).
+- A mensalidade em aberto é paga pelo 1º Pix Automático.
+- O Pix avulso pendente e a assinatura antiga são apagados no Asaas, sem cobrança dupla, e isso não cancela a conta.
+
+**Quando a troca é recusada:**
+- **Na rota:** para quem paga no cartão, para quem já pagou o mês e no teste grátis.
+- **No convite:** o Pessoal (Pix/indefinido, 16 assinaturas) ainda não tem Pix Automático e fica de fora.
+
+**Prévia em produção:** 3 convites em 16/10 e 3 em 17/10.
