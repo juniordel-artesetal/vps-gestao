@@ -17,6 +17,7 @@
     { "path": "/api/cron/estudio-acervo", "schedule": "0 10 * * 1" },
     { "path": "/api/cron/mae-assinatura", "schedule": "0 12 * * *" },
     { "path": "/api/cron/mae-lancamento", "schedule": "0 23 16 10 *" },
+    { "path": "/api/cron/mae-live", "schedule": "58 22 16 10 *" },
     { "path": "/api/cron/mae-recuperacao", "schedule": "40 * * * *" },
     { "path": "/api/cron/regua-mensal", "schedule": "0 12 * * *" }
   ]
