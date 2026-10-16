@@ -84,7 +84,7 @@ export async function criarCheckoutMigracao(p: { workspaceId: string; parcelas: 
   const corpo: Record<string, unknown> = {
     billingTypes: ['CREDIT_CARD'], chargeTypes: ['RECURRENT'], minutesToExpire: 1440,
     callback: { successUrl: `${p.baseUrl}/assinatura/migrar-anual?pago=1`, cancelUrl: `${p.baseUrl}/assinatura/migrar-anual`, expiredUrl: `${p.baseUrl}/assinatura/migrar-anual` },
-    items: [{ name: 'SOA — plano anual', quantity: 1, value: pcl.total }],
+    items: [{ name: 'SOA anual (troca do mensal)', description: `SOA anual por R$ ${pcl.total.toFixed(2).replace('.', ',')} à vista. 1ª cobrança em ${e.vencimentoMensal!.split('-').reverse().join('/')}, no lugar da mensalidade (a mensal é cancelada).`.slice(0, 150), quantity: 1, value: pcl.total }],
     externalReference: p.workspaceId,
     // a 1ª cobrança do anual cai no dia em que a mensalidade atual venceria (o mês pago é respeitado)
     subscription: { cycle: 'YEARLY', nextDueDate: e.vencimentoMensal },

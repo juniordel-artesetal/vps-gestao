@@ -158,3 +158,27 @@ A página hospedada tem reCAPTCHA: a assinatura ou compra que ela cria é feita 
 **Pendente:**
 - **SOA anual parcelado** (cadastro novo e régua): o mesmo defeito do recorrente. Decisão do Júnior: fica para depois da live.
 - **Aviso de renovação** do MAE anual parcelado, a fazer antes de out/2027.
+
+## Planos, links e e-mails — 16/10/2026 (cenário do Júnior)
+
+| Quem | Plano | Como cobra |
+|---|---|---|
+| Assinante do SOA (mensal ou anual) | MAE R$ 39,90/mês ou R$ 383/ano (até 12× com juros) | 2ª assinatura, à parte do SOA |
+| Não assinante — só o MAE | R$ 59,90/mês ou R$ 503/ano (até 12× com juros) | assinatura do MAE (standalone) |
+| Não assinante — SOA + MAE | R$ 89,80/mês ou R$ 753/ano | em 2 passos: cria a conta do SOA (R$ 49,90 ou R$ 370; teste de 14 dias do SOA) e soma o MAE (R$ 39,90 ou R$ 383) |
+
+**Item do checkout** (`nomeDoItemMae` ≤ 30 caracteres + `descricaoDoItemMae` ≤ 150, que aparece na página do Asaas):
+- "MAE p/ assinante SOA · mensal/anual";
+- "Método Mãe · mensal/anual";
+- o SOA também ganhou a descrição: preço e "1ª cobrança após N dias de teste grátis";
+- a troca: "SOA anual (troca do mensal)".
+
+**E-mail do lançamento:**
+- ativa: 3 botões (mensal, anual à vista, 12×);
+- inativa: o mesmo para o só-MAE e mais o SOA + MAE (R$ 89,80 / R$ 753, via `/assinatura`).
+- Os links vão direto ao plano (`/mae/pagar?o=…&conta=1`, que leva a quem já tem conta ao login, nunca ao cadastro).
+
+**Recuperação de vendas** (`lib/mae/assinatura/recuperacao.ts`, cron `/api/cron/mae-recuperacao` de hora em hora, `?seco=1` só conta):
+- quem abriu o pagamento e não pagou, ou criou a conta só-MAE sem assinar, recebe 3 e-mails: 1 h, 24 h e 72 h;
+- idempotente (`AssinaturaAviso` `MAE_RECUP_<n>`, dia = início da tentativa); respeita o opt-out;
+- para sozinho ao pagar; desliga com `MAE_RECUPERACAO=off`.

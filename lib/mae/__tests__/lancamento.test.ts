@@ -37,26 +37,23 @@ describe('quem compra o quê', () => {
   })
 })
 
-describe('e-mail do lançamento', () => {
+describe('e-mail do lançamento (cenário do Júnior, 16/10)', () => {
   const p = precosMae({ MAE_ADDON_MENSAL: '39.90', MAE_ADDON_ANUAL: '383', MAE_STANDALONE_MENSAL: '59.90', MAE_STANDALONE_ANUAL: '503' })!
-  it('ativa: SOA + Método Mãe com o preço do add-on, sem teste grátis, link só www.usesoa.com.br e cancelar avisos', () => {
-    const r = montarEmailLancamento('ativa', 'Maria <b>Silva</b>', p, 'https://www.usesoa.com.br/api/reengajamento/optout?u=1&t=x'), assunto = r.assunto, html = r.html.replace(/\u00a0/g, ' ')
-    expect(assunto).toMatch(/SOA \+ Método Mãe/)
+  const limpa = (h: string) => h.replace(/\u00a0/g, ' ')
+  it('ATIVA: o MAE soma ao SOA — R$ 39,90/mês, R$ 383 à vista, 12× com juros; cada botão vai direto ao plano (conta=1)', () => {
+    const r = montarEmailLancamento('ativa', 'Maria <b>Silva</b>', p, 'https://www.usesoa.com.br/api/reengajamento/optout?u=1&t=x'), html = limpa(r.html)
+    expect(r.assunto).toMatch(/R\$ 39,90/)
     expect(html).toContain('Oi, Maria!')
-    expect(html).toContain('+ R$ 39,90/mês')
-    expect(html).toContain('R$ 383,00')
-    expect(html).not.toContain('grátis')   // sem teste grátis (15/10)
-    expect(html).not.toContain('R$ 59,90')
-    expect(html).toContain('Cancelar os avisos')
+    expect(html).toContain('Mensal — R$ 39,90/mês'); expect(html).toContain('Anual — R$ 383,00 à vista'); expect(html).toContain('12× de R$ 38,21')
+    expect(html).toContain('/mae/pagar?o=soa-mae&ciclo=mensal&parcelas=1&conta=1')
+    expect(html).not.toContain('R$ 59,90'); expect(html).not.toContain('grátis')
     expect([...html.matchAll(/href="([^"]+)"/g)].every(m => m[1].startsWith('https://www.usesoa.com.br/'))).toBe(true)
   })
-  it('inativa: pode assinar SÓ o Método Mãe (preço do só-MAE) ou voltar ao SOA completo', () => {
-    const r = montarEmailLancamento('inativa', null, p, 'https://www.usesoa.com.br/x'), assunto = r.assunto, html = r.html.replace(/\u00a0/g, ' ')
-    expect(assunto).toMatch(/só ele/)
-    expect(html).toContain('Oi!')
-    expect(html).toContain('R$ 59,90/mês')
-    expect(html).toContain('R$ 503,00')
-    expect(html).toContain('https://www.usesoa.com.br/assinatura')
-    expect(html).toContain('assinar só o Método Mãe')
+  it('INATIVA: só o MAE (R$ 59,90 / R$ 503 / 12×) ou SOA + MAE (R$ 89,80/mês ou R$ 753/ano)', () => {
+    const r = montarEmailLancamento('inativa', null, p, 'https://www.usesoa.com.br/x', { mensal: 49.9, anual: 370 }), html = limpa(r.html)
+    expect(r.assunto).toMatch(/só ele/)
+    expect(html).toContain('Mensal — R$ 59,90/mês'); expect(html).toContain('Anual — R$ 503,00 à vista'); expect(html).toContain('12× de R$ 50,19')
+    expect(html).toContain('R$ 89,80/mês'); expect(html).toContain('R$ 753,00/ano')
+    expect(html).toContain('o=so-mae'); expect(html).toContain('conta=1'); expect(html).toContain('https://www.usesoa.com.br/assinatura')
   })
 })

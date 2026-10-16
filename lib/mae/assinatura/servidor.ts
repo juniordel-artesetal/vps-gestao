@@ -62,9 +62,21 @@ export async function assinaturaMaeDaConta(ws: string): Promise<AssinaturaMae | 
  * Método Mãe — vira standalone (preço do só-MAE; depois de pago ela enxerga só o MAE, ver liberaSoMae).
  * Quem já tem plano gravado (comprou antes) mantém o dele.
  */
-/** Nome do item no checkout do Asaas — no MÁXIMO 30 caracteres (o Asaas recusa o checkout acima disso). */
+/**
+ * Nome do item no checkout do Asaas — no MÁXIMO 30 caracteres (o Asaas recusa o checkout acima disso).
+ * Diz o plano da pessoa: "MAE p/ assinante SOA · mensal" (soma ao SOA) ou "Método Mãe · mensal" (só o MAE).
+ */
 export function nomeDoItemMae(plano: PlanoMaeVenda, ciclo: CicloMae): string {
-  return `Método Mãe ${plano === 'standalone' ? '' : '(add-on) '}${ciclo}`.replace(/\s+/g, ' ').slice(0, 30)
+  return `${plano === 'standalone' ? 'Método Mãe' : 'MAE p/ assinante SOA'} · ${ciclo}`.slice(0, 30)
+}
+const brlTxt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }).replace(/\u00a0/g, ' ')
+/** Descrição do plano na página de pagamento do Asaas (no MÁXIMO 150 caracteres). */
+export function descricaoDoItemMae(plano: PlanoMaeVenda, ciclo: CicloMae, c: { parcelas: number; valorParcela: number; total: number }): string {
+  const quem = plano === 'standalone' ? 'Método Mãe (sem o SOA)' : 'Método Mãe p/ quem assina o SOA, à parte do SOA'
+  const preco = ciclo === 'mensal' ? `${brlTxt(c.total)}/mês. Cancele quando quiser.`
+    : c.parcelas > 1 ? `1 ano em ${c.parcelas}x de ${brlTxt(c.valorParcela)} (total ${brlTxt(c.total)} c/ juros). Escolha ${c.parcelas}x no parcelamento.`
+      : `1 ano por ${brlTxt(c.total)} à vista. Renova todo ano.`
+  return `${quem}: ${preco}`.slice(0, 150)
 }
 
 /**
@@ -139,7 +151,7 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
     billingTypes: ['CREDIT_CARD'], chargeTypes: parcelado ? ['DETACHED', 'INSTALLMENT'] : ['RECURRENT'], minutesToExpire: 1440,
     callback: { successUrl: `${p.baseUrl}/mae/assinatura?pago=1`, cancelUrl: `${p.baseUrl}/mae/assinatura`, expiredUrl: `${p.baseUrl}/mae/assinatura` },
     // o item JÁ é o total com juros (tabela Price) — NÃO ligar "repassar juros ao cliente" no Asaas
-    items: [{ name: nome, quantity: 1, value: cobr.total }],
+    items: [{ name: nome, description: descricaoDoItemMae(plano, p.ciclo, cobr), quantity: 1, value: cobr.total }],
     externalReference: refAssinaturaMae(p.workspaceId),
     ...(parcelado
       ? { installment: { maxInstallmentCount: cobr.parcelas } }
@@ -211,7 +223,8 @@ export async function concluirCheckoutMae(checkoutId: string): Promise<boolean> 
 export async function encerrarCheckoutMae(checkoutId: string): Promise<boolean> {
   const a = await linhaPorCheckout(checkoutId)
   if (!a) return false
-  await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "checkoutLink" = NULL, "updatedAt" = NOW() WHERE "id" = ${a.id} AND "status" = 'AGUARDANDO_PAGAMENTO'`
+  // (sem mexer no updatedAt: ele marca o INÍCIO da tentativa — a recuperação de vendas conta a partir dele)
+  await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "checkoutLink" = NULL WHERE "id" = ${a.id} AND "status" = 'AGUARDANDO_PAGAMENTO'`
   return true
 }
 

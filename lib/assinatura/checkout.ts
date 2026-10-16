@@ -82,6 +82,7 @@ export async function criarCheckout(p: {
     chargeTypes: p.metodo === 'cartao' ? ['RECURRENT'] : ['DETACHED'],
     minutesToExpire: 1440,
     callback: { successUrl: aoConcluir, cancelUrl: voltarPara, expiredUrl: voltarPara },
+    // descrição do plano na página do Asaas (até 150 caracteres) — preenchida abaixo, quando o teste é conhecido
     items: [{ name: `SOA — plano ${plano.nome.toLowerCase()}`, quantity: 1, value: valor }],
     // `externalReference` é o que amarra o checkout à workspace nos webhooks.
     externalReference: p.workspaceId,
@@ -97,6 +98,9 @@ export async function criarCheckout(p: {
   // com o fim do trial (mesmo valor usado no trialAte de concluirCheckout).
   const diasTrial = (parceirasAtivo() && (await temInfluenciadoraAtribuida(p.workspaceId))) ? DIAS_TRIAL_INFLUENCIADORA : DIAS_TRIAL
 
+  // 16/10/2026: a descrição certa do plano aparece na página do Asaas (≤ 150 caracteres)
+  const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }).replace(/ /g, ' ')
+  ;(corpo.items as { description?: string }[])[0].description = `SOA ${plano.nome.toLowerCase()}: ${parcelas > 1 ? `${parcelas}x de ${brl(pcl.valorParcela)} (total ${brl(valor)})` : `${brl(valor)}${plano.ciclo === 'YEARLY' ? '/ano' : '/mês'}`}. 1ª cobrança após ${diasTrial} dias de teste grátis.`.slice(0, 150)
   if (p.metodo === 'cartao') {
     corpo.subscription = { cycle: plano.ciclo, nextDueDate: primeiroVencimento(diasTrial) }
     // O item JÁ É o total com juros (ver resolverParcelamento). maxInstallmentCount

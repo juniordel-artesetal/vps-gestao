@@ -12,6 +12,7 @@ import { avaliar } from '@/lib/assinatura'
 import { tokenOptOut } from '@/lib/reengajamento'
 import { precosMae, cobrancaMae, type PrecosMae } from './precos'
 import { janelaEmailLancamentoMae } from './lancamento'
+import { precoMensalVigente, anualAvistaVigente } from '@/lib/assinatura/planos'
 
 const REMETENTE = 'Equipe SOA <suporte@vps-gestao.com.br>'
 const SITE = 'https://www.usesoa.com.br'
@@ -32,33 +33,49 @@ const BENEFICIOS = [
 ]
 
 /** Assunto + HTML (puro, testável). */
-export function montarEmailLancamento(v: VarianteLancamento, nome: string | null, p: PrecosMae, optoutUrl: string): { assunto: string; html: string } {
+/** Link de um plano (o preço vai DIRETO para o pagamento; 12× passa pela lista de parcelas com os juros). Quem recebe o
+ *  e-mail já tem conta → `conta=1` (entra, nunca cria conta nova). */
+export const linkDoPlano = (o: 'soa-mae' | 'so-mae', ciclo: 'mensal' | 'anual', parcelas = 1) => `${SITE}/mae/pagar?o=${o}&ciclo=${ciclo}&parcelas=${parcelas}&conta=1`
+
+/**
+ * Assunto + HTML (puro, testável) — cenário do Júnior (16/10/2026):
+ *  • ATIVA (assina o SOA): o Método Mãe SOMA à assinatura do SOA (cobrança separada) — R$ 39,90/mês ou R$ 383/ano
+ *    (até 12× com juros);
+ *  • INATIVA: só o Método Mãe — R$ 59,90/mês ou R$ 503/ano (até 12× com juros) — ou voltar ao SOA + Método Mãe —
+ *    R$ 89,80/mês ou R$ 753/ano.
+ */
+export function montarEmailLancamento(v: VarianteLancamento, nome: string | null, p: PrecosMae, optoutUrl: string, soa: { mensal: number; anual: number } = { mensal: 49.9, anual: 370 }): { assunto: string; html: string } {
   const primeiro = nome ? esc(String(nome).trim().split(/\s+/)[0]) : ''
   const lista = BENEFICIOS.map(([t, d]) => `<li style="margin:0 0 8px"><b>${t}</b> — ${d}</li>`).join('')
-  const plano = v === 'ativa' ? p.addon : p.standalone
-  const doze = cobrancaMae(p, v === 'ativa' ? 'addon' : 'standalone', 'anual', 12).valorParcela
-  const precos = v === 'ativa'
-    ? `<p><b>SOA + Método Mãe:</b> o Método Mãe soma à sua assinatura do SOA, que continua como está — <b>+ ${brl(plano.mensal)}/mês</b>, ou no plano anual por <b>${brl(plano.anual)}</b> (ou até 12× de ${brl(doze)} no cartão).</p>`
-    : `<p>Você pode <b>voltar ao SOA completo</b> e somar o Método Mãe, ou <b>assinar só o Método Mãe</b>: <b>${brl(plano.mensal)}/mês</b>, ou no plano anual por <b>${brl(plano.anual)}</b> (ou até 12× de ${brl(doze)} no cartão). Seus dados do SOA continuam guardados.</p>`
-  const botao = v === 'ativa' ? 'Quero o SOA + Método Mãe' : 'Assinar o Método Mãe'
-  const extra = v === 'inativa'
-    ? `<p style="text-align:center;margin:-8px 0 20px;font-size:14px"><a href="${SITE}/assinatura" style="color:#c2410c">Prefiro voltar ao SOA completo</a></p>` : ''
+  const pl = v === 'ativa' ? 'addon' : 'standalone'
+  const o = v === 'ativa' ? 'soa-mae' : 'so-mae'
+  const doze = cobrancaMae(p, pl, 'anual', 12)
+  const btn = (txt: string, href: string, cheio = true) => `<a href="${href}" style="display:block;margin:8px 0;padding:12px 16px;border-radius:10px;text-decoration:none;font-weight:600;text-align:center;${cheio ? 'background:#f97316;color:#fff' : 'border:2px solid #f97316;color:#c2410c'}">${txt}</a>`
+  const caixa = (titulo: string, sub: string, botoes: string) => `<div style="border:1px solid #fde2cc;border-radius:12px;padding:14px 16px;margin:14px 0;background:#fffaf5"><p style="margin:0 0 4px;font-weight:700;font-size:16px">${titulo}</p><p style="margin:0 0 8px;color:#6b7280;font-size:14px">${sub}</p>${botoes}</div>`
+  const planosMae = caixa(
+    v === 'ativa' ? 'Método Mãe no seu SOA' : 'Só o Método Mãe',
+    v === 'ativa' ? 'Soma à sua assinatura do SOA (é uma cobrança separada; o SOA continua como está).' : 'Para usar só o Método Mãe, sem o resto do SOA. Seus dados continuam guardados.',
+    btn(`Mensal — ${brl(p[pl].mensal)}/mês`, linkDoPlano(o, 'mensal'))
+      + btn(`Anual — ${brl(p[pl].anual)} à vista`, linkDoPlano(o, 'anual', 1), false)
+      + btn(`Anual em até 12× — 12× de ${brl(doze.valorParcela)} (com juros)`, linkDoPlano(o, 'anual', 12), false))
+  const combo = v === 'inativa' ? caixa('SOA + Método Mãe', `Volte ao SOA completo e some o Método Mãe: ${brl(soa.mensal + p.addon.mensal)}/mês (SOA ${brl(soa.mensal)} + Método Mãe ${brl(p.addon.mensal)}) ou ${brl(soa.anual + p.addon.anual)}/ano. Primeiro você regulariza o SOA; depois, é só ativar o Método Mãe no Hub de módulos.`,
+    btn('Voltar ao SOA + Método Mãe', `${SITE}/assinatura`, false)) : ''
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1f2937;line-height:1.55">
     <p style="font-size:16px">${primeiro ? `Oi, ${primeiro}!` : 'Oi!'} 💛</p>
     <p style="font-size:18px"><b>Chegou o Método Mãe</b> — o jeito de produzir as artes personalizadas dos seus pedidos sem perder noites no computador.</p>
     <ul style="padding-left:20px">${lista}</ul>
-    ${precos}
-    <p>O pagamento é no cartão, na página segura do Asaas, e você cancela quando quiser, pela própria tela da assinatura.</p>
-    <p>Quer ver tudo antes? <a href="${SITE}/mae" style="color:#c2410c">Conheça o Método Mãe</a>.</p>
-    <p style="text-align:center;margin:24px 0"><a href="${SITE}/mae/assinatura" style="background:#f97316;color:#fff;text-decoration:none;padding:13px 26px;border-radius:10px;font-weight:600">${botao}</a></p>
-    ${extra}
+    <p style="margin-top:18px;font-weight:700">Escolha o seu plano (o pagamento é no cartão, na página segura do Asaas):</p>
+    ${planosMae}
+    ${combo}
+    <p style="font-size:14px;color:#6b7280">No anual parcelado, na página de pagamento escolha <b>12×</b> em “Selecione o parcelamento” — o valor já inclui os juros. Cancele quando quiser, pela própria tela da assinatura.</p>
+    <p style="font-size:14px">Quer ver tudo antes? <a href="${SITE}/mae" style="color:#c2410c">Conheça o Método Mãe</a>.</p>
     <p style="color:#6b7280;font-size:14px">Qualquer dúvida, é só responder este e-mail. 💛</p>
     <p style="margin-top:20px">Com carinho,<br><b>Equipe SOA</b></p>
     <p style="color:#9ca3af;font-size:12px;margin-top:24px">Não quer receber novidades do SOA? <a href="${optoutUrl}" style="color:#9ca3af">Cancelar os avisos</a>.</p>
   </div>`.trim()
-  const assunto = v === 'ativa' ? 'Chegou o Método Mãe: SOA + Método Mãe 💛' : 'Chegou o Método Mãe — e você pode assinar só ele 💛'
-  return { assunto, html }
+  const assunto = v === 'ativa' ? 'Chegou o Método Mãe: some ao seu SOA por R$ 39,90/mês 💛' : 'Chegou o Método Mãe — e você pode assinar só ele 💛'
+  return { assunto: assunto.replace('R$ 39,90', brl(p.addon.mensal).replace(/\u00a0/g, ' ')), html }
 }
 
 const betas = () => new Set(String(process.env.MAE_BETA_WORKSPACES ?? '').split(',').map(s => s.trim()).filter(Boolean))
@@ -120,7 +137,7 @@ export async function dispararEmailLancamento(o: { seco?: boolean; agora?: Date;
     if (!enviar.length) continue
     const corpo = enviar.map(d => {
       const optout = `${SITE}/api/reengajamento/optout?u=${encodeURIComponent(d.userId)}&t=${tokenOptOut(d.userId)}`
-      const { assunto, html } = montarEmailLancamento(d.variante, d.nome, p, optout)
+      const { assunto, html } = montarEmailLancamento(d.variante, d.nome, p, optout, { mensal: precoMensalVigente(), anual: anualAvistaVigente() })
       return { from: REMETENTE, to: [d.email], subject: assunto, html }
     })
     const ids = reservados.map(r => r.id)

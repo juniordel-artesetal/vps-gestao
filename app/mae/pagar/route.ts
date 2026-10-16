@@ -24,7 +24,9 @@ export async function GET(req: NextRequest) {
 
   const session = await getServerSession(authOptions)
   const ws = session?.user.workspaceId
-  if (!ws) return ir(o === 'so-mae' ? `/mae/cadastro?depois=${encodeURIComponent(aqui)}` : `/login?callbackUrl=${encodeURIComponent(aqui)}`)
+  // &conta=1 (links dos e-mails): a pessoa JÁ tem conta → entra (nunca o cadastro de conta nova)
+  const temConta = url.searchParams.get('conta') === '1'
+  if (!ws) return ir(o === 'so-mae' && !temConta ? `/mae/cadastro?depois=${encodeURIComponent(aqui)}` : `/login?callbackUrl=${encodeURIComponent(aqui)}`)
   if (session.user.role !== 'ADMIN') return ir(tela)
   try {
     if (o === 'anual-soa') {
