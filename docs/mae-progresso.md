@@ -3615,3 +3615,9 @@ O doc está em `docs/mae-ajustes-lote-21.md`. **Decisão do Júnior:** fazer 248
 - **O teste de tempo "papel na FRENTE < 0,3 s"** falhou às vezes com a máquina ocupada (build e harnesses ao mesmo tempo). Medido sozinho, dá 85–127 ms com e sem o Lote 21.
 
 **Publicado:** 16/10/2026, commit `4dc03e2` (um único push), deploy `dpl_FPqyrjCK8QWmzMLzyMNQm2LWc6Fy` (Ready). Conferido: `www.usesoa.com.br/api/versao`. A página `/mae` segue ok em produção.
+
+## Lote 22 (16/10/2026, dia do lançamento) — cliente "só MAE"
+
+Doc: `docs/mae-ajustes-lote-22.md`. Contas de teste em produção: teste.somae@usesoa.com.br (só MAE, cortesia) e teste.soacompleto@usesoa.com.br (SOA completa, liberação manual). Senhas fora do repositório.
+
+- **257 (no ar 19h07, commit `c27173c`, deploy `dpl_8Ri9o8qYFhAxbcm2JgpDSSyHkgLo`):** "Importar planilha" e "Novo pedido" nunca somem para a conta só MAE. O plano vem da sessão (`session.user.soMae`) e a consulta só promove para "mae" (`lib/mae/pedidos/planoTela.ts`). Conferido em produção com as duas contas, inclusive com a consulta do plano forçada a falhar (`fabtest/ui_lote22_prod.mts`). Antes, com a falha, a só MAE ficava sem os botões; a SOA completa segue igual.
