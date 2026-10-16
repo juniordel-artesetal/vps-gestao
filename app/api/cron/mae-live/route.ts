@@ -11,7 +11,9 @@ export const maxDuration = 300
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const segredo = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || url.searchParams.get('secret')
-  if (!process.env.CRON_SECRET || segredo !== process.env.CRON_SECRET) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  // plano B: o Master pode disparar à mão (x-master-token) se o cron da Vercel não rodar
+  const master = !!process.env.MASTER_SECRET_TOKEN && req.headers.get('x-master-token') === process.env.MASTER_SECRET_TOKEN
+  if (!master && (!process.env.CRON_SECRET || segredo !== process.env.CRON_SECRET)) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   try {
     const r = await dispararEmailLive({ seco: url.searchParams.get('seco') === '1' })
     return NextResponse.json({ ok: !r.erro, ...r })
