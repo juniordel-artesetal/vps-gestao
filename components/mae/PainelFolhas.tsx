@@ -23,6 +23,7 @@ import { FOLHAS, medidasFolha } from '@/lib/mae/schema'
 import { useMarcas, carregarMarcas, marcaDaPrancheta, adicionarMarca } from './marcasMae'
 import { mensagemDeErro } from '@/lib/mae/erros'
 import { LigarProduto } from './PainelGrupos'
+import { useSoMae, DICA_KIT_SO_MAE } from './soMae'
 import { useEditor } from './estado'
 import type { MarcaRegistro } from './sincronia'
 
@@ -342,18 +343,20 @@ export function PainelAjusteFino() {
 
 /** 189.7: PRODUTO DO SOA do kit + como o pedido vai sair. */
 export function PainelProdutoKit() {
+  const soMae = useSoMae()
   const doc = useMaeDoc(s => s.hist.atual)
   const aplicar = useMaeDoc.getState().aplicar
   const g = grupoDoKit(doc)
   const folhas = folhasDa(doc)
   return (
     <section className="space-y-2" data-painel-produto-kit>
-      <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Produto do SOA</h2>
-      <p className="text-[11px] text-gray-500">O produto do SOA (ex.: Kit etiqueta escolar, Tags de agradecimento) que sai neste kit.</p>
+      <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{soMae ? 'Produto' : 'Produto do SOA'}</h2>
+      {soMae ? <p className="text-[11px] text-gray-500" data-dica-so-mae>{DICA_KIT_SO_MAE}</p>
+        : <p className="text-[11px] text-gray-500">O produto do SOA (ex.: Kit etiqueta escolar, Tags de agradecimento) que sai neste kit.</p>}
       {g ? <div className="text-[11px]"><LigarProduto g={g} /></div>
-        : <button className={btn} onClick={() => aplicar('Kit do produto', d => sincronizarKit(d))} data-comecar-produto>Ligar a um produto</button>}
+        : <button className={btn} onClick={() => aplicar('Kit do produto', d => sincronizarKit(d))} data-comecar-produto>{soMae ? 'Definir o produto' : 'Ligar a um produto'}</button>}
       {/* Lote 18 (item 220): sem produto, a edição em massa usa a QTD do pedido (aviso laranja, não some calado) */}
-      {!g?.produtoId && !g?.produtoNome && <p className="rounded-lg border border-orange-300 bg-orange-50 px-2 py-1 text-[11px] text-orange-800" data-sem-produto>⚠ Esta base não está ligada a nenhum produto do SOA — nos pedidos o MAE usa a QTD do pedido. Ligue o produto para os pedidos acharem esta base sozinhos.</p>}
+      {!soMae && !g?.produtoId && !g?.produtoNome && <p className="rounded-lg border border-orange-300 bg-orange-50 px-2 py-1 text-[11px] text-orange-800" data-sem-produto>⚠ Esta base não está ligada a nenhum produto do SOA — nos pedidos o MAE usa a QTD do pedido. Ligue o produto para os pedidos acharem esta base sozinhos.</p>}
       {folhas.length > 0 && <p className="text-xs font-semibold" data-exemplo-pedido>Como o pedido vai sair: {resumoPedidoDe(folhas, g?.composicao, doc.molds)}.</p>}
     </section>
   )

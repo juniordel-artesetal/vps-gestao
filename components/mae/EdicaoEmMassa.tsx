@@ -10,6 +10,7 @@ import DicasMae from './Dicas'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { planoDaTela, type PlanoTela } from '@/lib/mae/pedidos/planoTela'
+import { useSoMae } from './soMae'
 import Link from 'next/link'
 import { Loader2, Download, Square, Check, AlertTriangle, XCircle, Eye, FolderOpen, RefreshCw, Palette, MessageSquare, Boxes, SlidersHorizontal, RotateCcw, X, Printer, Plus, Upload } from 'lucide-react'
 import FiltrosPedidos from './FiltrosPedidos'
@@ -82,6 +83,7 @@ const chaveDoAlvo = (a: AlvoPedido) => chaveTema(a.produto) || '_'
 function Miniatura({ raiz, t, valores, item, id, unidades = 0 }: { raiz: FileSystemDirectoryHandle | null; t: TemaDisponivel; valores: Record<string, string>; item?: ItemPedido; id: string; unidades?: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const grandeRef = useRef<HTMLCanvasElement>(null)
+  const soMae = useSoMae()
   const [estado, setEstado] = useState<'ver' | 'carregando' | 'ok' | 'erro'>('ver')
   const [grande, setGrande] = useState(false)
   const [legenda, setLegenda] = useState<string | null>(null)
@@ -98,7 +100,7 @@ function Miniatura({ raiz, t, valores, item, id, unidades = 0 }: { raiz: FileSys
       const conta = cont === 'composicao' ? { kits: Math.max(1, unidades || 1), pecas: 0 } : { kits: 1, pecas: Math.max(1, unidades || kit[0].folha.pecas.length) }
       const kd = docDoKit(base, tema, distribuirKit(kit, [conta], cont, false, grupo?.composicao), [{ rotulo: '', valores }])
       docV = kd.doc; temaV = kd.tema; porSlot = kd.valoresPorSlot
-      setLegenda(`${cont === 'composicao' ? `${conta.kits} un. · ` : cont === 'pecas' ? `${conta.pecas} un. · ` : ''}${kd.artboardIds.length} folha${kd.artboardIds.length > 1 ? 's' : ''}${semLigacao ? ' · base sem produto do SOA (usei a QTD)' : ''}`)
+      setLegenda(`${cont === 'composicao' ? `${conta.kits} un. · ` : cont === 'pecas' ? `${conta.pecas} un. · ` : ''}${kd.artboardIds.length} folha${kd.artboardIds.length > 1 ? 's' : ''}${semLigacao && !soMae ? ' · base sem produto do SOA (usei a QTD)' : ''}`)
     }
     const abs = docV.artboards.filter(a => docV.molds.some(m => m.artboardId === a.id)).slice(0, 6)
     const bmps: ImageBitmap[] = []
@@ -748,7 +750,7 @@ export default function EdicaoEmMassa() {
         const k = kitDoAlvo(d, alvo)
         let r: Awaited<ReturnType<typeof gerarArteDoPedido>>
         if (k) {
-          if (k.semLigacao) avisos.push(avisoSemProduto(d.base))
+          if (k.semLigacao && plano !== 'mae') avisos.push(avisoSemProduto(d.base))
           const valores = valoresDaLinha(l, d.tema), conta = contaKit(alvo, k, e)
           const pk = pedidosDoKit(l, valores, conta)
           const kd = docDoKit(d.base, d.tema, distribuirKit(kitDaProva(k, e), pk.contas, k.contagem, pk.juntar, k.grupo?.composicao), pk.peds)
@@ -789,7 +791,7 @@ export default function EdicaoEmMassa() {
             const pk = pedidosDoKit(l, valores, contaKit(alvo, k, e))
             const kd = docDoKit(d.base, d.tema, distribuirKit(kitDaProva(k, e), pk.contas, k.contagem, pk.juntar, k.grupo?.composicao), pk.peds)
             itens.push({ id, pedidoId: l.pedido.id, numero: l.pedido.numero, nome: primeiroNome(l), temaNome: d.tema.name ?? t.name, tema: kd.tema, doc: kd.doc, valores, valoresPorSlot: kd.valoresPorSlot,
-              rotulos: e.identificacao ? kd.rotulos : {}, produto, papel: papelDoItem(tipoDeProduto(d.base.name, k.grupo?.nome)), peds: [{ id, l, valores }], avisos: k.semLigacao ? [avisoSemProduto(d.base)] : [], temaId: kd.tema.id, temaVersao: kd.tema.version })
+              rotulos: e.identificacao ? kd.rotulos : {}, produto, papel: papelDoItem(tipoDeProduto(d.base.name, k.grupo?.nome)), peds: [{ id, l, valores }], avisos: k.semLigacao && plano !== 'mae' ? [avisoSemProduto(d.base)] : [], temaId: kd.tema.id, temaVersao: kd.tema.version })
             continue
           }
           const m = montarItem(d, l, alvo, e)
@@ -806,7 +808,7 @@ export default function EdicaoEmMassa() {
           const p0 = g.its[0], produto = nomeDoProduto(g.d, g.k.grupo, p0.alvo)
           itens.push({ id: p0.id, pedidoId: p0.l.pedido.id, numero: p0.l.pedido.numero, nome: primeiroNome(p0.l), temaNome: g.d.tema.name ?? g.t.name, tema: kd.tema, doc: kd.doc, valores: { _PEDIDO: '1' },
             valoresPorSlot: kd.valoresPorSlot, rotulos: e.identificacao ? kd.rotulos : {}, produto, papel: papelDoItem(tipoDeProduto(g.d.base.name, g.k.grupo?.nome)), nPedidos: g.its.length,
-            peds: g.its.map((x, i) => ({ id: x.id, l: x.l, valores: peds[i].valores })), avisos: g.k.semLigacao ? [avisoSemProduto(g.d.base)] : [], temaId: kd.tema.id, temaVersao: kd.tema.version, separacao: kd.resumo })
+            peds: g.its.map((x, i) => ({ id: x.id, l: x.l, valores: peds[i].valores })), avisos: g.k.semLigacao && plano !== 'mae' ? [avisoSemProduto(g.d.base)] : [], temaId: kd.tema.id, temaVersao: kd.tema.version, separacao: kd.resumo })
         } catch (er) { rs.push(...g.its.map(x => ({ id: x.id, status: 'erro' as const, mensagem: mensagemDeErro(er) }))) }
       }
       const rl = await gerarLotesImpressao({ raiz: r0, identidade, marcas }, itens, {
@@ -944,7 +946,7 @@ export default function EdicaoEmMassa() {
       )}
 
       {carregando ? <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Carregando os pedidos…</p>
-        : !visiveis.length ? <p className="text-sm text-gray-500">{aba === 'gerados' ? 'Nenhum pedido gerado ainda.' : <>Nenhum pedido pendente. Os pedidos precisam dos campos <b>TEMA</b>, <b>NOME</b> e <b>IDADE</b> (Configurações → Campos do pedido).</>}</p>
+        : !visiveis.length ? <p className="text-sm text-gray-500">{aba === 'gerados' ? 'Nenhum pedido gerado ainda.' : plano === 'mae' ? <span data-vazio-so-mae>Nenhum pedido ainda. Importe a planilha da Shopee ou crie um pedido.{' '}<button className={btn} onClick={() => setImportar(true)}><Upload className="w-3.5 h-3.5" /> Importar planilha</button>{' '}<button className={btn} onClick={() => setManual(true)}><Plus className="w-3.5 h-3.5" /> Novo pedido</button></span> : <>Nenhum pedido pendente. Os pedidos precisam dos campos <b>TEMA</b>, <b>NOME</b> e <b>IDADE</b> (Configurações → Campos do pedido).</>}</p>
         : (
           <div className="overflow-x-auto rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
             <table className="w-full text-xs">
@@ -1129,7 +1131,7 @@ export default function EdicaoEmMassa() {
                           ? <details key={i} className="text-amber-700" data-alerta-linha data-aviso-mr><summary className="cursor-pointer">{a.split(' — ')[0]} · ver detalhes</summary>{a.split(' — ').slice(1).join(' — ')}</details>
                           : <div key={i} className={/ilegível/.test(a) ? 'rounded bg-orange-100 px-1 font-semibold text-orange-800' : 'text-amber-700'} data-alerta-linha>{a}</div>)}
                         {/* Lote 18 (item 220): a base deste tema não está ligada a um produto do SOA → aviso laranja (usa a QTD) */}
-                        {(() => { const x = l.tema && docsTema[l.tema.themeId]; return x && baseDoAlvo(x.base, x.tema, l.alvos[0]?.itens[0]).semLigacao
+                        {(() => { const x = l.tema && docsTema[l.tema.themeId]; return x && plano !== 'mae' && baseDoAlvo(x.base, x.tema, l.alvos[0]?.itens[0]).semLigacao
                           ? <div className="mt-0.5 rounded bg-orange-50 px-1 text-orange-800" data-base-sem-produto>A base “{x.base.name}” não está ligada a nenhum produto do SOA — uso a QTD do pedido. <Link className="font-semibold underline" href="/estudio/mae" data-ligar-produto>Ligar agora</Link></div> : null })()}
                         {r?.valor?.separacao && <details className="text-gray-600" data-separacao><summary className="cursor-pointer">separação das folhas</summary>{r.valor.separacao.map((x, i) => <div key={i}>{x}</div>)}</details>}
                       </td>

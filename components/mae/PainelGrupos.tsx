@@ -6,6 +6,7 @@
 //    criar, renomear, reordenar e excluir (os moldes vão para "Sem grupo");
 //  · item 61: PRANCHETAS com painel próprio (lista, nova, tamanho/orientação, girar, duplicar, excluir, organizar).
 import { useEffect, useState } from 'react'
+import { useSoMae, DICA_KIT_SO_MAE } from './soMae'
 import { ChevronDown, ChevronUp, Copy, Folder, FolderPlus, Link2, Plus, RotateCw, Trash2, X, Pencil } from 'lucide-react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
@@ -33,6 +34,7 @@ async function produtosDoSoa(): Promise<VariacaoSoa[]> {
 /** Item 72: o painel "Grupos de produto". */
 export function PainelGrupos() {
   const doc = useMaeDoc(s => s.hist.atual)
+  const soMae = useSoMae()
   const aplicar = useMaeDoc.getState().aplicar
   const grupos = gruposDa(doc)
   const [produtos, setProdutos] = useState<VariacaoSoa[]>([])
@@ -76,7 +78,8 @@ export function PainelGrupos() {
         <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Grupos de produto</h2>
         <button className={btn} onClick={() => { let id = ''; aplicar('Novo grupo', d => { id = criarGrupo(d, `Grupo ${gruposDa(d).length + 1}`) }); setEditando(id) }} data-novo-grupo><FolderPlus className="w-3.5 h-3.5" /> Novo grupo</button>
       </div>
-      <p className="text-[11px] text-gray-500">Uma base com todo o portfólio: cada grupo é um produto do SOA (Kit Festa, Sacola P, Tag…). O tema é criado uma vez e sai separado por grupo (&ldquo;Sereia · Kit Festa&rdquo;). Sem grupos, a base vale como um produto só.</p>
+      {soMae ? <p className="text-[11px] text-gray-500" data-dica-so-mae>Uma base com todo o portfólio: cada grupo é um produto (Kit Festa, Sacola P, Tag…). {DICA_KIT_SO_MAE} O tema é criado uma vez e sai separado por grupo.</p> :
+      <p className="text-[11px] text-gray-500">Uma base com todo o portfólio: cada grupo é um produto do SOA (Kit Festa, Sacola P, Tag…). O tema é criado uma vez e sai separado por grupo (&ldquo;Sereia · Kit Festa&rdquo;). Sem grupos, a base vale como um produto só.</p>}
       <ul className="space-y-1.5" data-lista-grupos>
         {grupos.map((g, i) => (
           <li key={g.id} className={`rounded-lg border p-1.5 space-y-1 ${sobre === g.id ? 'border-orange-400 bg-orange-50/60' : 'border-gray-200 dark:border-gray-700'}`}
@@ -129,6 +132,7 @@ export function PainelGrupos() {
 /** Item 72: no tema, quais grupos ele tem (ex.: tema sem rótulo → desmarca o grupo Rótulo). */
 export function GruposDoTema() {
   const doc = useMaeDoc(s => s.hist.atual)
+  const soMae = useSoMae()
   const tema = useMaeTema(s => s.hist?.atual ?? null)
   const grupos = gruposDa(doc)
   if (!tema || !grupos.length) return null
@@ -143,7 +147,7 @@ export function GruposDoTema() {
             if (e.target.checked) s.delete(g.id); else s.add(g.id)
             ;(t as DocTema).gruposDesligados = [...s]
           })} data-grupo-tema={g.nome} />
-          {tema.name ?? 'Tema'} · {g.nome}{!g.produtoId && !g.variacaoId ? <span className="text-amber-700"> (sem produto do SOA)</span> : null}
+          {tema.name ?? 'Tema'} · {g.nome}{!soMae && !g.produtoId && !g.variacaoId ? <span className="text-amber-700"> (sem produto do SOA)</span> : null}
         </label>
       ))}
     </div>
@@ -211,12 +215,24 @@ export function PainelPranchetas() {
 export function LigarProduto({ g }: { g: Grupo }) {
   const aplicar = useMaeDoc.getState().aplicar
   const [produtos, setProdutos] = useState<VariacaoSoa[]>([])
-  useEffect(() => { void produtosDoSoa().then(setProdutos) }, [])
+  const soMae = useSoMae()
+  useEffect(() => { if (!soMae) void produtosDoSoa().then(setProdutos) }, [soMae])
   const porProduto = new Map<string, { produtoId: string; nome: string; vars: VariacaoSoa[] }>()
   for (const v of produtos) {
     const pid = v.produtoId ?? `nome:${v.produtoNome}`
     const p = porProduto.get(pid) ?? { produtoId: pid, nome: v.produtoNome, vars: [] }
     p.vars.push(v); porProduto.set(pid, p)
+  }
+  // Lote 22 (item 258): só MAE não tem produto do SOA — o kit é achado pelo nome do produto como vem na planilha
+  if (soMae) {
+    const digitar = () => { const n = prompt('Nome do produto como vem na planilha (ex.: Kit Escolar, Tag Cofrinho):', g.produtoNome ?? g.nome)?.trim(); if (n) aplicar('Nome do produto do grupo', d => ligarProduto(d, g.id, { produtoId: null, variacaoId: null, produtoNome: n.slice(0, 200) })) }
+    return (
+      <div className="flex flex-wrap items-center gap-1 text-[11px] text-gray-600" data-produto-so-mae>
+        <Link2 className="w-3 h-3 shrink-0" />
+        {g.produtoNome ? <>Nome na planilha: <b>{g.produtoNome}</b></> : <span>Nome na planilha: o do grupo (<b>{g.nome}</b>)</span>}
+        <button type="button" className="rounded border border-gray-200 px-1.5 py-0.5 hover:bg-gray-50 dark:border-gray-700" onClick={digitar} data-digitar-nome-so-mae>✎ {g.produtoNome ? 'Trocar' : 'Escrever outro nome'}</button>
+      </div>
+    )
   }
   return (
     <>
