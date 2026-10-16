@@ -86,6 +86,8 @@ export interface LinhaRegua {
   segmento?: string | null
   /** A assinatura no Asaas continua VIVA (não cancelada) — a cobrança contínua só segue enquanto isto for verdade. */
   assinaturaViva?: boolean
+  /** Último e-mail PARCELA_FALHOU enviado (no máximo 1 por semana). */
+  ultimoAvisoParcela?: Date | null
 }
 
 export interface Decisao {
@@ -231,7 +233,11 @@ export function decidir(l: LinhaRegua, hoje = new Date(), mensal = reguaMensalLi
   // falhou. Merece texto próprio e NÃO dispara corte por si só.
   // Só ANUAL: `parcelaFalhou` é "alguma cobrança OVERDUE na assinatura" — sem esta guarda, todo
   // mensal/Pix atrasado recebia, TODO DIA, o e-mail da parcela do anual 12x.
-  if (l.parcelaFalhou && l.ciclo === 'YEARLY') {
+  // 16/10/2026 (caso Edclaudia): saía TODO DIA. Inadimplente/cortada já recebe os avisos de atraso (INAD_*, CORTE,
+  // COBRANCA_SEMANAL) — este fica só para quem segue ATIVA com uma parcela falhada, no máximo 1 vez por semana.
+  const desdeParcela = l.ultimoAvisoParcela ? -(diasAte(l.ultimoAvisoParcela, hoje) ?? 0) : null
+  if (l.parcelaFalhou && l.ciclo === 'YEARLY' && l.assinaturaStatus !== 'INADIMPLENTE'
+      && (desdeParcela === null || desdeParcela >= LEMBRETE_A_CADA_DIAS)) {
     avisos.push('PARCELA_FALHOU')
     if (motivo === 'sem ação') motivo = 'parcela do anual 12x não foi paga'
   }

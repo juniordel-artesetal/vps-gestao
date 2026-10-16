@@ -15,6 +15,7 @@ export async function carregarLinhasRegua(): Promise<LinhaRegua[]> {
              SELECT 1 FROM "AsaasCobranca" c
              WHERE c."subscriptionId" = a."subscriptionId" AND c."status" = 'OVERDUE'
            ) AS "parcelaFalhou",
+           (SELECT MAX(av."enviadoEm") FROM "AssinaturaAviso" av WHERE av."workspaceId" = w."id" AND av."tipo" = 'PARCELA_FALHOU') AS "ultimoAvisoParcela",
            -- Pagamento REAL confirmado em qualquer cobrança do workspace: a régua NUNCA
            -- corta quem tem isto (guarda anti-corte-de-pagante).
            -- Pagou o período VIGENTE (cobrança paga que cobre o vencimento em aberto) — status só atrasado.

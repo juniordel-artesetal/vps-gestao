@@ -71,3 +71,18 @@ describe('os e-mails — domínio do SOA e sem buraco', () => {
     expect(h.texto).not.toContain('/assinatura')
   })
 })
+
+describe('parcela do anual que não entrou (16/10: saía todo dia)', () => {
+  const anual = (x: Partial<LinhaRegua>) => linha({ assinaturaStatus: 'ATIVA', ciclo: 'YEARLY', parcelaFalhou: true, assinaturaExpira: diasAtras(-200), ...x })
+  it('ativa com parcela falhada: 1ª vez e depois só a cada 7 dias', () => {
+    expect(decidir(anual({}), HOJE).avisos).toEqual(['PARCELA_FALHOU'])
+    expect(decidir(anual({ ultimoAvisoParcela: diasAtras(1) }), HOJE).avisos).toEqual([])
+    expect(decidir(anual({ ultimoAvisoParcela: diasAtras(6) }), HOJE).avisos).toEqual([])
+    expect(decidir(anual({ ultimoAvisoParcela: diasAtras(7) }), HOJE).avisos).toEqual(['PARCELA_FALHOU'])
+  })
+  it('inadimplente (caso Edclaudia): só os avisos de atraso, nada de "parcela" todo dia', () => {
+    const l = anual({ assinaturaStatus: 'INADIMPLENTE', assinaturaExpira: diasAtras(5), planoEscolhido: 'anual' })
+    expect(decidir(l, HOJE).avisos).not.toContain('PARCELA_FALHOU')
+    expect(decidir({ ...l, assinaturaExpira: diasAtras(6) }, HOJE).avisos).not.toContain('PARCELA_FALHOU')
+  })
+})
