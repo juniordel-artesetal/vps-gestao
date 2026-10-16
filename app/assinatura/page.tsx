@@ -295,6 +295,14 @@ export default function AssinaturaPage() {
           </a>
         )}
 
+        {/* ── Troca do mensal pelo anual (16/10/2026): a própria tela confere se ela pode (cartão, em dia) ── */}
+        {emDia && estado.origem === 'asaas' && (
+          <a href="/assinatura/migrar-anual" className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-orange-200 bg-white px-5 py-4 text-sm hover:border-orange-400" data-link-migrar-anual>
+            <span><strong className="text-gray-900">Paga mensal? Troque para o anual</strong><span className="block text-gray-600">A 1ª cobrança do anual só vem quando a mensalidade atual vencer.</span></span>
+            <ArrowRight className="h-5 w-5 shrink-0 text-orange-500" />
+          </a>
+        )}
+
         {/* ── QR DO PIX, na nossa tela ─────────────────────────────────── */}
         {pix && (
           <div className="rounded-2xl border-2 border-orange-200 bg-white p-6 mb-6">

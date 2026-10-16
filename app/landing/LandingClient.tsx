@@ -777,6 +777,7 @@ export default function LandingClient({ novoCadastro, parceiras, precoMensal, pr
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
           <VpsLogo />
           <nav className="hidden items-center gap-8 text-sm text-slate-300 md:flex">
+            <a href="/mae" className="font-semibold text-orange-300 transition hover:text-orange-200">Método MAE</a>
             <a href="#modulos-planos" className="transition hover:text-white">Módulos</a>
             <a href="#preco" className="transition hover:text-white">Planos</a>
             <a href="#faq" className="transition hover:text-white">FAQ</a>

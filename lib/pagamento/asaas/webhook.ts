@@ -20,6 +20,7 @@ import { aplicarEventoAssinaturaEstudio, ehExternalRefEdmod } from '@/lib/estudi
 import { aplicarEventoEspeciais, ehExternalRefEdtpl } from '@/lib/estudio/especiais'
 import { ehExternalRefValidacao } from '@/lib/assinatura/validacaoCartao'
 import { concluirCheckoutMae, encerrarCheckoutMae, aplicarPagamentoMae, aplicarFimAssinaturaMae } from '@/lib/mae/assinatura/servidor'
+import { concluirMigracaoAnual, encerrarCheckoutMigracao, ehMensalMigrada } from '@/lib/assinatura/migracaoAnual'
 
 // O mascaramento LGPD vive em ./mascarar (módulo puro, testável sem banco).
 export * from './mascarar'
@@ -167,6 +168,13 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
         return { aplicado: true }
       }
     } catch (e) { console.error('[ASAAS-WH] checkout do Método Mãe:', (e as Error)?.message); throw e }
+    // TROCA DO SOA MENSAL → ANUAL: o checkout é da troca? Conclui (apaga a mensal no Asaas) e é só dela.
+    try {
+      if (evento === 'CHECKOUT_PAID' ? await concluirMigracaoAnual(id) : await encerrarCheckoutMigracao(id)) {
+        console.log(`[ASAAS-WH] checkout da troca para o anual ${id} ${evento}`)
+        return { aplicado: true }
+      }
+    } catch (e) { console.error('[ASAAS-WH] troca para o anual:', (e as Error)?.message); throw e }
     if (evento === 'CHECKOUT_PAID') {
       const r = await concluirCheckout(id)
       console.log(`[ASAAS-WH] checkout pago ${id} ws=${r.workspaceId ?? '?'}`)
@@ -187,6 +195,9 @@ export async function aplicarEvento(body: PayloadAsaas): Promise<{ aplicado: boo
     // MÉTODO MÃE: assinatura do MAE encerrada → só ela (acesso até o fim do período pago).
     try { if (await aplicarFimAssinaturaMae(sub)) return { aplicado: true } }
     catch (e) { console.error('[ASAAS-WH] Método Mãe (encerra) não aplicado:', (e as Error)?.message) }
+    // TROCA PARA O ANUAL: a mensal apagada na troca NÃO cancela a conta (o anual já está no lugar dela).
+    try { if (await ehMensalMigrada(sub)) { console.log(`[ASAAS-WH] mensal ${sub} encerrada pela troca para o anual`); return { aplicado: true } } }
+    catch (e) { console.error('[ASAAS-WH] troca para o anual (encerra):', (e as Error)?.message); throw e }
     // ADD-ON MARKETPLACES: se a subscription encerrada é do módulo (outro produto), corta só o
     // acesso ao módulo (respeitando cortesia) e não toca a assinatura principal do SOA.
     try { if (await aplicarEventoMarketplaces(evento, sub, null)) return { aplicado: true } }

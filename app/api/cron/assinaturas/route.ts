@@ -1,3 +1,4 @@
+import { apagarMensaisPendentes } from '@/lib/assinatura/migracaoAnual'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { serialize } from '@/lib/serialize'
@@ -56,6 +57,9 @@ export async function POST(req: NextRequest) {
   if (!dryRun) {
     try { reconciliacao = await reconciliarPagamentosDoCheckout() }
     catch (e) { console.error('[CRON-ASSINATURAS] reconciliação do checkout falhou:', (e as Error)?.message) }
+    // troca do mensal → anual: mensal que o Asaas não apagou na hora (nunca pode cobrar junto do anual)
+    try { await apagarMensaisPendentes() }
+    catch (e) { console.error('[CRON-ASSINATURAS] troca para o anual (mensais pendentes):', (e as Error)?.message) }
   }
 
   // Só o que a régua pode tocar. O filtro por origem já exclui Hotmart e contas

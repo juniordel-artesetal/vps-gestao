@@ -1,0 +1,587 @@
+<title>Guia Método MAE no SOA</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Nunito+Sans:ital,opsz,wght@0,6..12,400;0,6..12,600;0,6..12,700;1,6..12,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: guia de bancada — índice fixo à esquerda, coluna de leitura com prints emoldurados por marcas de registro; uma coluna no celular */
+:root{
+  --bg:#fbfaf8; --paper:#ffffff; --ink:#2a1f2d; --muted:#6c6270; --line:#e7e1e4;
+  --accent:#f26a1b; --accent-soft:#fff0e6; --accent-ink:#b8470a;
+  --plum:#5b2a5e; --plum-soft:#f4ecf5;
+  --ok:#1f8a4c; --ok-soft:#e8f6ee; --warn:#b26a00; --warn-soft:#fff6e0;
+  --cut:#d9363e; --fold:#2f6fd6;
+  --f-display:"Bricolage Grotesque", "Trebuchet MS", system-ui, sans-serif;
+  --f-body:"Nunito Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+  --r:12px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#17121a; --paper:#211a25; --ink:#f3ecf4; --muted:#b4a9b8; --line:#3a3040;
+  --accent:#ff8a45; --accent-soft:#3a2216; --accent-ink:#ffb27f;
+  --plum:#d9a7dc; --plum-soft:#2e2133;
+  --ok:#5fd18f; --ok-soft:#173326; --warn:#ffc35a; --warn-soft:#3a2d12;
+  --cut:#ff6b72; --fold:#7aa7ff; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#17121a; --paper:#211a25; --ink:#f3ecf4; --muted:#b4a9b8; --line:#3a3040;
+  --accent:#ff8a45; --accent-soft:#3a2216; --accent-ink:#ffb27f;
+  --plum:#d9a7dc; --plum-soft:#2e2133;
+  --ok:#5fd18f; --ok-soft:#173326; --warn:#ffc35a; --warn-soft:#3a2d12;
+  --cut:#ff6b72; --fold:#7aa7ff; color-scheme:dark}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:17px;line-height:1.65;margin:0}
+a{color:var(--accent-ink)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* topo */
+.top{border-bottom:1px solid var(--line);background:var(--paper)}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:14px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-weight:800;font-size:18px;letter-spacing:-.01em}
+.brand .dot{width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.top small{color:var(--muted);font-size:14px}
+
+/* abertura */
+.hero{padding-block:48px 28px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-ink)}
+.hero h1{font-family:var(--f-display);font-weight:800;font-size:clamp(34px,6vw,60px);line-height:1.02;letter-spacing:-.025em;margin:.25em 0 .3em;text-wrap:balance;max-width:16ch}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.hero p.lead{font-size:19px;max-width:62ch;color:var(--muted);margin:0}
+
+/* fluxo base → tema → pedido */
+.flow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin-top:30px;border:1.5px dashed var(--fold);border-radius:var(--r);background:var(--paper)}
+.flow > div{padding:18px 20px;min-width:0;position:relative}
+.flow > div + div{border-left:1.5px dashed var(--fold)}
+.flow b{font-family:var(--f-display);font-size:22px;display:block;letter-spacing:-.01em}
+.flow span.k{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.flow p{margin:.35em 0 0;font-size:15px;color:var(--muted);line-height:1.5}
+.flow .n{color:var(--accent)}
+@media (max-width:720px){.flow{grid-template-columns:1fr}.flow > div + div{border-left:0;border-top:1.5px dashed var(--fold)}}
+
+/* corpo com índice */
+.layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;padding-block:24px 80px}
+.toc{position:sticky;top:calc(16px + env(safe-area-inset-top,0px));align-self:start;font-size:14.5px}
+.toc p{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;border-left:2px solid var(--line)}
+.toc a{display:flex;gap:10px;text-decoration:none;color:var(--ink);padding:5px 10px;margin-left:-2px;border-left:2px solid transparent;line-height:1.35}
+.toc a span{font-family:var(--f-mono);color:var(--muted);font-size:12px;padding-top:2px;min-width:18px}
+.toc a:hover{border-left-color:var(--accent);color:var(--accent-ink)}
+.toc-mobile{display:none}
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc{display:none}
+  .toc-mobile{display:block;margin-bottom:8px;background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:12px 16px}
+  .toc-mobile summary{font-weight:700;cursor:pointer}
+  .toc-mobile ol{margin:10px 0 0;padding-left:20px;font-size:15px}
+}
+
+main{min-width:0}
+section{padding-top:28px;margin-top:28px;border-top:1.5px dashed var(--line);scroll-margin-top:16px}
+section:first-of-type{border-top:0;margin-top:0}
+.sec-n{font-family:var(--f-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-ink)}
+h2{font-family:var(--f-display);font-weight:800;font-size:clamp(26px,3.6vw,36px);line-height:1.1;letter-spacing:-.02em;margin:.2em 0 .5em;text-wrap:balance}
+h3{font-family:var(--f-display);font-weight:700;font-size:21px;letter-spacing:-.01em;margin:1.6em 0 .4em;text-wrap:balance}
+p{margin:0 0 1em;max-width:68ch}
+.intro{font-size:18px;color:var(--muted)}
+code,.mono{font-family:var(--f-mono);font-size:.86em;background:var(--plum-soft);color:var(--plum);padding:1px 6px;border-radius:5px;overflow-wrap:anywhere}
+.btn{display:inline-block;font-weight:700;font-size:.92em;background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:0 7px;white-space:nowrap}
+.btn.or{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* passos */
+ol.steps{list-style:none;counter-reset:s;margin:0 0 1.2em;padding:0;display:flex;flex-direction:column;gap:14px;max-width:72ch}
+ol.steps > li{counter-increment:s;display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;align-items:start}
+ol.steps > li::before{content:counter(s);font-family:var(--f-display);font-weight:800;font-size:15px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-ink);margin-top:1px}
+ol.steps > li > div{min-width:0}
+ol.steps b.t{display:block}
+ul.plain{margin:0 0 1em;padding-left:20px;max-width:68ch}
+ul.plain li{margin:.25em 0}
+
+/* etapas da base */
+.stages{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin:8px 0 18px;padding:0;list-style:none;counter-reset:st}
+.stages li{counter-increment:st;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:15px;line-height:1.45;min-width:0}
+.stages li b{display:block;font-family:var(--f-display);font-size:16px}
+.stages li b::before{content:counter(st, decimal-leading-zero)" ";font-family:var(--f-mono);font-size:12px;color:var(--accent-ink);font-weight:600}
+
+/* prints com marcas de registro */
+figure.shot{margin:18px 0 26px;position:relative;padding:14px;max-width:100%}
+figure.shot::before,figure.shot::after,figure.shot .rm1,figure.shot .rm2{content:"";position:absolute;width:18px;height:18px;border-color:var(--ink);border-style:solid;opacity:.75}
+figure.shot::before{top:0;left:0;border-width:2.5px 0 0 2.5px}
+figure.shot::after{top:0;right:0;border-width:2.5px 2.5px 0 0}
+figure.shot .rm1{bottom:0;left:0;border-width:0 0 2.5px 2.5px}
+figure.shot .rm2{bottom:0;right:0;border-width:0 2.5px 2.5px 0}
+figure.shot button{display:block;padding:0;border:1px solid var(--line);background:var(--paper);border-radius:8px;overflow:hidden;cursor:zoom-in;width:100%;max-width:100%}
+figure.shot img{display:block;width:100%;height:auto}
+figure.shot.narrow{max-width:520px}
+figure.shot.mid{max-width:760px}
+figcaption{font-size:14px;color:var(--muted);margin-top:10px;max-width:68ch}
+figcaption b{color:var(--ink)}
+
+/* caixas de destaque */
+.note{border-radius:var(--r);padding:14px 18px;margin:16px 0 20px;max-width:72ch;border:1px solid var(--line);background:var(--paper)}
+.note p:last-child,.note ul:last-child{margin-bottom:0}
+.note .lbl{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;display:block;margin-bottom:4px}
+.note.gold{background:var(--accent-soft);border-color:transparent}
+.note.gold .lbl{color:var(--accent-ink)}
+.note.warn{background:var(--warn-soft);border-color:transparent}
+.note.warn .lbl{color:var(--warn)}
+.note.ok{background:var(--ok-soft);border-color:transparent}
+.note.ok .lbl{color:var(--ok)}
+
+/* regra da quantidade */
+.rule{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 18px}
+.rule div{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-family:var(--f-mono);font-size:14px;font-variant-numeric:tabular-nums}
+.rule div b{color:var(--accent-ink)}
+
+/* tabela */
+.tbl{overflow-x:auto;margin:10px 0 20px;max-width:100%}
+table{border-collapse:collapse;font-size:15px;min-width:520px;width:100%}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* checklist */
+ul.check{list-style:none;padding:0;margin:0 0 1.2em;display:flex;flex-direction:column;gap:8px;max-width:72ch}
+ul.check li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:8px}
+ul.check li::before{content:"";width:18px;height:18px;border:2px solid var(--accent);border-radius:5px;margin-top:4px}
+
+/* perguntas */
+details.faq{border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:0 16px;margin:0 0 10px;max-width:76ch}
+details.faq summary{cursor:pointer;font-weight:700;padding:13px 0;list-style:none;display:flex;justify-content:space-between;gap:12px}
+details.faq summary::after{content:"+";font-family:var(--f-mono);color:var(--accent-ink);font-size:18px;line-height:1}
+details.faq[open] summary::after{content:"–"}
+details.faq summary::-webkit-details-marker{display:none}
+details.faq > div{padding-bottom:12px}
+
+/* glossário */
+dl.glos{display:grid;grid-template-columns:minmax(120px,190px) minmax(0,1fr);gap:8px 20px;margin:0;max-width:76ch}
+dl.glos dt{font-weight:700;font-family:var(--f-display)}
+dl.glos dd{margin:0;color:var(--muted)}
+@media (max-width:560px){dl.glos{grid-template-columns:minmax(0,1fr)}dl.glos dd{margin-bottom:8px}}
+
+footer{border-top:1px solid var(--line);padding-block:24px 40px;color:var(--muted);font-size:14px}
+
+/* ampliar print */
+dialog#zoom{border:0;padding:0;background:transparent;max-width:96vw;max-height:94vh}
+dialog#zoom::backdrop{background:rgba(20,12,22,.82)}
+dialog#zoom img{display:block;max-width:96vw;max-height:88vh;width:auto;height:auto;border-radius:8px;background:#fff}
+dialog#zoom button{position:absolute;top:8px;right:8px;background:#fff;color:#2a1f2d;border:0;border-radius:50%;width:38px;height:38px;font-size:20px;cursor:pointer}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><span class="dot" aria-hidden="true"></span>Método MAE · SOA</div>
+    <small>Passo a passo com prints reais do sistema</small>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">Molde · Arrasta · Encaixa</div>
+    <h1>Do molde ao <em>PDF pronto</em> pra imprimir</h1>
+    <p class="lead">Este guia mostra, na ordem, tudo o que você faz no Método MAE dentro do SOA: montar a base do seu kit uma vez, vestir cada tema em minutos e gerar a arte de cada pedido sozinha, com nome, idade e quantidade certas.</p>
+
+    <div class="flow" role="list">
+      <div role="listitem"><span class="k">uma vez por kit</span><b><span class="n">1.</span> Base</b><p>Os moldes, as folhas, as partes (FRENTE, FUNDO…) e onde vão o nome e a idade.</p></div>
+      <div role="listitem"><span class="k">uma vez por tema</span><b><span class="n">2.</span> Tema</b><p>Papéis, personagens e estilo do nome. Arrastou numa parte, aparece em todas as caixas.</p></div>
+      <div role="listitem"><span class="k">todo dia</span><b><span class="n">3.</span> Pedidos</b><p>O SOA traz nome, idade e quantidade. Você confere e gera um ou vários de uma vez.</p></div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <nav class="toc" aria-label="Índice">
+      <p>Neste guia</p>
+      <ol>
+        <li><a href="#comecar"><span>00</span>Antes de começar</a></li>
+        <li><a href="#base"><span>01</span>Base de caixas</a></li>
+        <li><a href="#sob-medida"><span>02</span>Tags, rótulos e etiquetas</a></li>
+        <li><a href="#marca"><span>03</span>Marca de registro e corte</a></li>
+        <li><a href="#tema"><span>04</span>Criar um tema</a></li>
+        <li><a href="#tema-pronto"><span>05</span>Tema pronto (arte pronta)</a></li>
+        <li><a href="#pedidos"><span>06</span>Pedidos e edição em massa</a></li>
+        <li><a href="#gerar"><span>07</span>Gerar, imprimir e cortar</a></li>
+        <li><a href="#regras"><span>08</span>Regras de ouro</a></li>
+        <li><a href="#duvidas"><span>09</span>Dúvidas comuns</a></li>
+        <li><a href="#glossario"><span>10</span>Glossário</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <details class="toc-mobile">
+        <summary>Índice do guia</summary>
+        <ol>
+          <li><a href="#comecar">Antes de começar</a></li>
+          <li><a href="#base">Base de caixas</a></li>
+          <li><a href="#sob-medida">Tags, rótulos e etiquetas</a></li>
+          <li><a href="#marca">Marca de registro e corte</a></li>
+          <li><a href="#tema">Criar um tema</a></li>
+          <li><a href="#tema-pronto">Tema pronto</a></li>
+          <li><a href="#pedidos">Pedidos e edição em massa</a></li>
+          <li><a href="#gerar">Gerar, imprimir e cortar</a></li>
+          <li><a href="#regras">Regras de ouro</a></li>
+          <li><a href="#duvidas">Dúvidas comuns</a></li>
+          <li><a href="#glossario">Glossário</a></li>
+        </ol>
+      </details>
+
+      <!-- 00 -->
+      <section id="comecar">
+        <div class="sec-n">00 · Preparação</div>
+        <h2>Antes de começar</h2>
+        <p class="intro">Faça isso uma vez só. São cinco minutos que evitam quase todos os problemas do começo.</p>
+
+        <ul class="check">
+          <li><div><b>Use o computador, no Chrome ou no Edge.</b> O MAE trabalha direto com os arquivos e as fontes do seu computador, e só esses dois navegadores permitem isso. Não funciona no celular.</div></li>
+          <li><div><b>Crie a pasta <span class="mono">Biblioteca MAE</span> dentro do Dropbox, Google Drive ou OneDrive.</b> É ali que ficam seus moldes, papéis, elementos e os PDFs gerados. Na nuvem, você ganha backup automático e pode usar em outro computador.</div></li>
+          <li><div><b>Instale as fontes que você usa</b> (Creative Fabrica, Google Fonts…) no computador. O MAE lista as fontes instaladas; se o tema usa uma fonte que não está instalada, ele avisa.</div></li>
+          <li><div><b>Tenha seus moldes em mãos</b> (PDF, SVG, DXF ou PNG) e, se corta na máquina automática, o arquivo da sua <b>marca de registro</b>.</div></li>
+          <li><div><b>No SOA, os seus produtos precisam dos campos TEMA, NOME e IDADE.</b> É deles que o MAE tira o que vai escrito em cada arte.</div></li>
+        </ul>
+
+        <figure class="shot narrow"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/menu.jpg" alt="Menu do SOA com a seção Método MAE aberta" loading="lazy"></button>
+          <figcaption><b>Onde fica:</b> no menu do SOA, abra <b>Método MAE</b>. Lá estão a montagem da base, os temas, o editor e os pedidos.</figcaption>
+        </figure>
+
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/biblioteca.jpg" alt="Tela do Método MAE com o painel Biblioteca MAE e Fontes do computador" loading="lazy"></button>
+          <figcaption>No topo ficam as três abas que você vai usar sempre: <b>1. Base</b>, <b>2. Tema</b> e <b>3. Editor livre</b>, mais o botão <b>Pedidos (massa)</b>. No painel da direita você confere a pasta <b>Biblioteca MAE</b> e as <b>fontes do computador</b>.</figcaption>
+        </figure>
+      </section>
+
+      <!-- 01 -->
+      <section id="base">
+        <div class="sec-n">01 · Uma vez por kit</div>
+        <h2>Montar a base de caixas</h2>
+        <p class="intro">A base é o seu kit “em branco”: os moldes nas folhas, cada face com nome (FRENTE, FUNDO, LATERAL…) e o lugar do nome e da idade. Você monta uma vez e usa em todos os temas desse kit.</p>
+
+        <p>Clique em <span class="btn or">1. Base</span> → <span class="btn">Nova base</span>. O painel da esquerda mostra a etapa em que você está, com <span class="btn">Voltar</span> e <span class="btn">Próximo</span> no fim. As etapas são estas:</p>
+
+        <ol class="stages">
+          <li><b>Moldes</b>Importe os moldes (vários de uma vez). Confira o tamanho de cada um.</li>
+          <li><b>Pranchetas</b>O tamanho da folha (A4, retrato ou paisagem). Uma base pode ter várias folhas.</li>
+          <li><b>Faces</b>O MAE detecta cada face do molde. Corrija com <i>Fechar pontilhado</i>, Laço, Dividir ou Unir.</li>
+          <li><b>Partes</b>Escolha uma parte (FRENTE, FUNDO…) e clique nas faces dela em todos os moldes.</li>
+          <li><b>Enquadramento</b>O papel quadriculado de teste mostra como a arte entra em cada face. Ajuste o que precisar.</li>
+          <li><b>Nome e textos</b>Marque onde vão NOME, IDADE, HASHTAG ou “Nome + idade” em cada caixa.</li>
+          <li><b>Identidade</b>Sua logo e QR Code, fixos em todas as caixas.</li>
+          <li><b>Grupos de produto</b>Ligue cada grupo de moldes ao produto do SOA (Kit Festa, Sacola P…).</li>
+          <li><b>Marca de registro</b>A marca da sua máquina em cada folha (veja a seção 03).</li>
+          <li><b>Arte inteligente</b>A sobra (sangria) que a arte passa da linha de corte.</li>
+          <li><b>Salvar</b>Dê um nome à base e salve.</li>
+        </ol>
+
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/base-moldes.jpg" alt="Etapa Moldes com seis caixas importadas nas pranchetas" loading="lazy"></button>
+          <figcaption><b>Moldes:</b> as 6 caixas do kit já nas pranchetas. Na lista, cada molde mostra quantas faces, furos e dobras o MAE encontrou. Se uma linha pontilhada não fechar, aumente o <b>Fechar pontilhado</b> e clique em <b>Detectar de novo</b>.</figcaption>
+        </figure>
+
+        <h3>As partes são o coração do método</h3>
+        <p>Uma parte junta as faces equivalentes de todos os moldes. Quando você arrasta um papel para a FRENTE no tema, ele vai para <b>todas as frentes</b> de todas as caixas. Escolha a parte na lista e clique nas faces; cada parte ganha uma cor.</p>
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/base-partes.jpg" alt="Etapa Partes com faces coloridas por parte: FECHO SUPERIOR, FUNDO, ALÇA, TOPO" loading="lazy"></button>
+          <figcaption>Cada cor é uma parte. O número ao lado mostra quantas faces ela tem. Faces sem parte viram <b>abas</b> (recebem o papel das abas). Precisa de outra parte? Digite em <b>nova parte</b> (ex.: ETIQUETA).</figcaption>
+        </figure>
+        <div class="note gold"><span class="lbl">Dica</span><p><b>Cenário contínuo:</b> marque quando duas faces vizinhas devem formar uma arte só, que atravessa a dobra (um cenário de frente a lateral, por exemplo).</p></div>
+
+        <h3>Grupos de produto: uma base, vários produtos</h3>
+        <p>Se a mesma base tem o kit e as sacolas, crie um grupo para cada produto e ligue cada grupo ao produto do SOA. No pedido de Kit Festa saem só as caixas do kit; no pedido de Sacola P, só a sacola P. Sem grupos, a base vale como um produto só.</p>
+        <figure class="shot mid"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/base-grupos.jpg" alt="Etapa Grupos de produto com dois grupos ligados a produtos do SOA" loading="lazy"></button>
+          <figcaption><b>Grupos de produto:</b> cada grupo tem o seu produto (ou variação) do SOA. Arraste os moldes para o grupo certo.</figcaption>
+        </figure>
+        <div class="note warn"><span class="lbl">Não esqueça</span><p><b>A base precisa estar ligada ao produto do SOA.</b> Sem isso, o MAE não sabe a quantidade do pedido e gera só 1 unidade.</p></div>
+
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/abrir-base.jpg" alt="Janela Abrir base com a lista de bases, versões e quantos temas usam cada uma" loading="lazy"></button>
+          <figcaption><b>Abrir base:</b> cada base mostra a versão, a data da última edição e em quantos temas é usada. Antes de excluir uma base, o MAE avisa se algum tema depende dela.</figcaption>
+        </figure>
+      </section>
+
+      <!-- 02 -->
+      <section id="sob-medida">
+        <div class="sec-n">02 · Peças planas</div>
+        <h2>Tags, rótulos e etiquetas</h2>
+        <p class="intro">Para peças sem molde de caixa (tag, rótulo de Nutella, etiqueta escolar, toppers), crie uma base de <b>Peças sob medida</b>. Cada peça já nasce com o contorno de corte, e o MAE distribui as cópias na folha.</p>
+
+        <ol class="steps">
+          <li><div><b class="t">Escolha a peça</b>Use uma das <b>Medidas prontas</b> (Etiqueta escolar, Tag, Nutella, Pirulito, Mini Pringles…) ou <b>Medida personalizada</b> (retângulo, círculo/oval, com furo, em mm). As medidas variam entre marcas: confira e ajuste.</div></li>
+          <li><div><b class="t">Monte as folhas do kit</b>Para cada folha: papel (A4), marca de registro, espaço entre peças e quantas cabem. Se você tem o <b>gabarito da sua plotter</b> ou faca, suba o arquivo: o MAE segue o seu gabarito.</div></li>
+          <li><div><b class="t">Fundo, miolo e textos</b>Defina a estrutura de cada peça (fundo, miolo, faixa) e onde vão nome e idade.</div></li>
+          <li><div><b class="t">Ligue ao produto do SOA</b>Igual à base de caixas: sem produto ligado, sai 1 unidade só.</div></li>
+        </ol>
+
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/sob-medida.jpg" alt="Etapa Peças por medida com medidas prontas e uma tag redonda de 40 mm com furo" loading="lazy"></button>
+          <figcaption><b>Peças por medida:</b> aqui, uma tag redonda de 40 mm com furo de 3,5 mm.</figcaption>
+        </figure>
+        <figure class="shot mid"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/folhas-kit.jpg" alt="Folhas de impressão com milk_marca registro, espaço de 2 mm e gabarito travado da plotter" loading="lazy"></button>
+          <figcaption><b>Folhas de impressão:</b> tamanho da folha, marca de registro, espaço entre peças e o gabarito da plotter (travado).</figcaption>
+        </figure>
+
+        <h3>Quantas peças vão em cada pedido</h3>
+        <p>No bloco de quantidade da base, informe quantas peças de cada tipo vão em <b>1 unidade</b> do pedido. Quase sempre é <b>1</b> (1 tag; ou 1 corpo + 1 tampa no rótulo). O total vem da quantidade do pedido, e o MAE distribui pelas folhas.</p>
+        <div class="rule">
+          <div>Tags · pedido de <b>96</b> → 96 tags → <b>4 folhas</b> de 24</div>
+          <div>Rótulo Nutella · pedido de <b>15</b> → corpos 7 + 7 + 1 · tampas 12 + 3</div>
+        </div>
+        <div class="note gold"><span class="lbl">A regra da quantidade</span><p><b>A QTD do pedido é o total de peças que a cliente recebe.</b> Kit de 10 × 1 = <b>10</b>. Kit de 10 × 2 = <b>20</b>. Se a quantidade no SOA vier como “1 kit”, ajuste para o total antes de gerar.</p></div>
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/lote-folhas.jpg" alt="PDF gerado com folhas de corpos e de tampas do rótulo Nutella" loading="lazy"></button>
+          <figcaption>Resultado: as folhas de corpos e de tampas, cada uma na quantidade certa.</figcaption>
+        </figure>
+      </section>
+
+      <!-- 03 -->
+      <section id="marca">
+        <div class="sec-n">03 · Print and cut</div>
+        <h2>Marca de registro e corte certinho</h2>
+        <p class="intro">Se você corta na máquina automática (Silhouette, Cameo…), a marca de registro é o que diz à máquina onde a arte está. Você sobe o arquivo da sua marca; o MAE coloca na folha, em tamanho real.</p>
+
+        <ol class="steps">
+          <li><div><b class="t">Suba a marca</b>Na etapa <b>Marca de registro</b> da base, clique em <span class="btn">+ Adicionar marca (PDF)</span>. Depois escolha, para cada caixa, qual marca usar (ou <b>Usar esta marca em todas as pranchetas A4</b>).</div></li>
+          <li><div><b class="t">Imprima a folha de teste</b><b>Imprimir folha de teste da marca</b> sai só com a marca e as linhas de corte, sem arte. Corte na máquina e veja se o corte cai em cima da linha.</div></li>
+          <li><div><b class="t">Se desviar, faça o ajuste fino</b>Clique no <b>nome da marca</b> na lista. Ajuste X (direita/esquerda) e Y (baixo/cima), ou use <b>Medir num PDF que corta certo</b>: escolha um PDF antigo que corta perfeito na sua máquina, a página daquela caixa, e o MAE calcula sozinho. Clique em <span class="btn or">Salvar ajuste</span>.</div></li>
+          <li><div><b class="t">Teste de novo</b>Imprima outra folha de teste e corte. O ajuste fica salvo na marca e vale para todas as bases, kits e pedidos que usam ela.</div></li>
+        </ol>
+
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/mr-ajuste.jpg" alt="Painel de ajuste fino da marca de registro ao lado das caixas Minecraft" loading="lazy"></button>
+          <figcaption><b>Ajuste fino:</b> o painel abre quando você clica no nome da marca. A arte e o molde não mexem; só a marca anda.</figcaption>
+        </figure>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <figure class="shot" style="flex:1 1 260px;max-width:380px"><span class="rm1"></span><span class="rm2"></span>
+            <button type="button" data-zoom><img src="img/mr-medir.jpg" alt="Medir num PDF que corta certo: a marca tem de andar 0,45 mm na horizontal" loading="lazy"></button>
+            <figcaption><b>Medir:</b> “a marca tem de andar 0,45 mm na horizontal”. Confira e salve.</figcaption>
+          </figure>
+          <figure class="shot" style="flex:1 1 260px;max-width:440px"><span class="rm1"></span><span class="rm2"></span>
+            <button type="button" data-zoom><img src="img/mr-lista.jpg" alt="Lista de marcas com o ajuste salvo em cada uma" loading="lazy"></button>
+            <figcaption>Depois de salvo, cada marca mostra o ajuste (ex.: <span class="mono">ajustada +3,1 mm</span>).</figcaption>
+          </figure>
+        </div>
+        <figure class="shot narrow"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/corte-antes-depois.jpg" alt="Foto de duas caixas cortadas: em cima depois do ajuste, embaixo antes, com faixa branca na lateral" loading="lazy"></button>
+          <figcaption><b>Antes × depois:</b> embaixo, antes do ajuste (faixa branca na lateral = corte deslocado). Em cima, depois: o corte cai em cima da linha.</figcaption>
+        </figure>
+        <div class="note gold"><span class="lbl">Dicas</span>
+          <ul class="plain">
+            <li>Unidades: o ajuste está em <b>cm</b> se o editor estiver em cm. 3 mm = <span class="mono">0,3</span> cm.</li>
+            <li>Marca exportada direto do <b>Silhouette Studio</b> costuma dispensar ajuste.</li>
+            <li>Na hora de gerar, deixe ligado <b>Fundo branco atrás das marcas de registro</b>: a máquina lê melhor.</li>
+            <li>PDF gerado <b>antes</b> do ajuste continua desajustado: gere de novo.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 04 -->
+      <section id="tema">
+        <div class="sec-n">04 · Minutos por tema</div>
+        <h2>Criar um tema</h2>
+        <p class="intro">O tema “veste” a base: papéis, personagens, enfeites e o estilo do nome. Você faz uma vez e ele se replica em todas as caixas.</p>
+
+        <ol class="steps">
+          <li><div><b class="t">Crie o tema na base certa</b>Aba <span class="btn or">2. Tema</span> → digite o nome → <span class="btn">+ Novo tema nesta base</span>. <b>Use o mesmo nome que vem no campo TEMA dos pedidos</b> (ex.: <span class="mono">URSINHOS CARINHOSOS_KIT FESTA</span>): é assim que o pedido acha o tema sozinho.</div></li>
+          <li><div><b class="t">Arraste os papéis para as partes</b>Em <b>Papéis</b>, use <span class="btn">Adicionar…</span> para trazer seus arquivos. Arraste cada papel para a parte (FRENTE, FUNDO…) na lista <b>Partes</b>: todas as faces daquela parte recebem o papel na hora.</div></li>
+          <li><div><b class="t">Coloque os elementos</b>Em <b>Elementos</b>, arraste personagens, laços e flores para a folha. Eles entram em todas as caixas. Para mudar uma caixa só, clique nela e use <b>Só nesta caixa</b>.</div></li>
+          <li><div><b class="t">Estilize o nome uma vez</b>Fonte, cor, contorno, sombra, efeitos ou um preset da Loja da Naty. Vale para todas as posições do nome.</div></li>
+          <li><div><b class="t">Confira e salve</b>Veja todas as pranchetas, teste com um nome curto (Ana) e um comprido (Maria Eduarda) e clique em <span class="btn">Salvar</span>. Espere aparecer “Salvo há…” no topo.</div></li>
+        </ol>
+
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/tema-papeis.jpg" alt="Tema com papéis, partes e painel 'Só nesta caixa' com a Loja da Naty" loading="lazy"></button>
+          <figcaption><b>Papéis e partes:</b> à esquerda, os papéis do tema e a lista de partes. No topo, <b>Editando só: MILK</b> mostra que a mudança vale só para aquela caixa; <b>Todas as caixas da parte</b> volta ao normal.</figcaption>
+        </figure>
+
+        <div class="note gold"><span class="lbl">Atalho que vale ouro</span><p>Segure <b>Alt</b> ao soltar um papel numa face: ele vai <b>só para aquela caixa</b>, sem mudar as outras.</p></div>
+
+        <h3>O nome e a idade</h3>
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/tema-texto.jpg" alt="Painel Texto com Nome + idade, cor única ou por letra, prender um enfeite ao nome e nome simples ou composto" loading="lazy"></button>
+          <figcaption><b>Painel Texto:</b> escolha <b>Nome + idade</b>, <b>IDADE</b> ou <b>Idade do bloco</b>, digite um nome de prévia e ajuste.</figcaption>
+        </figure>
+        <ul class="plain">
+          <li><b>Nome simples × composto:</b> o MAE usa o simples para nome de uma palavra e o composto para dois ou mais (em 1 ou 2 linhas).</li>
+          <li><b>Nome comprido:</b> o MAE diminui sozinho para caber na área do nome. O pedido avisa “fonte reduzida para 86%”. A área do nome é a caixinha pontilhada: puxe os cantos para mudar.</li>
+          <li><b>Cor por letra:</b> monte uma sequência de cores e o MAE pinta letra por letra (estilo “MÁRIO JR.”), em qualquer nome.</li>
+          <li><b>Prender um enfeite ao nome:</b> o laço da Hello Kitty na última letra, a coroa em cima… O enfeite acompanha o nome, curto ou comprido.</li>
+          <li><b>Fonte sem acento:</b> o MAE coloca o acento por você. Pedidos com letra que a fonte não tem aparecem no filtro <b>Letra faltando</b>.</li>
+          <li><b>Hashtag:</b> # + nome + texto do tema + idade (ex.: <span class="mono">#MariaJúliafaz1</span>). O “faz” é editável.</li>
+        </ul>
+        <figure class="shot narrow"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/tema-estilos.jpg" alt="Estilos do nome com presets da Loja da Naty e fundo do texto com logo" loading="lazy"></button>
+          <figcaption><b>Estilos:</b> use um preset da Loja da Naty, crie o seu com <b>+ Efeito</b> e salve como preset para usar em outros temas.</figcaption>
+        </figure>
+        <figure class="shot mid"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/tema-ursinhos.jpg" alt="Rótulo Ursinhos Carinhosos com o nome Maria Júlia dos dois lados" loading="lazy"></button>
+          <figcaption>Precisa do nome duas vezes? Duplique o texto. Confira gerando um pedido de teste.</figcaption>
+        </figure>
+
+        <h3>Versão sem nome e o que o tema gera</h3>
+        <p>Pedido que chega sem nome? Crie também o tema sem nome (ex.: <span class="mono">…_SEM NOME</span>) e escolha-o em <b>Versão sem nome</b>, no painel da direita. Em <b>Este tema gera</b>, confira quais produtos saem desse tema.</p>
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/tema-gera.jpg" alt="Painel Este tema gera com kit festa, sacola P, sacola G lisa e escalopada" loading="lazy"></button>
+          <figcaption><b>Este tema gera:</b> o kit e as sacolas, cada um ligado ao seu produto do SOA.</figcaption>
+        </figure>
+      </section>
+
+      <!-- 05 -->
+      <section id="tema-pronto">
+        <div class="sec-n">05 · Arte que já existe</div>
+        <h2>Tema pronto: usar artes que você já tem</h2>
+        <p class="intro">Já tem o kit pronto em PDF (do Photoshop, por exemplo)? Suba como <b>Tema pronto</b>: o MAE encaixa cada página na sua caixa e você só posiciona o nome e a idade.</p>
+
+        <ol class="steps">
+          <li><div><b class="t">Arquivo</b>Um PDF com <b>uma página por caixa</b>, no tamanho da folha (ou um PNG por página). Dê o nome do tema igual ao campo TEMA do pedido.</div></li>
+          <li><div><b class="t">Páginas</b>Em <b>Onde entra</b>, escolha a base. Cada página precisa estar ligada à caixa certa: o nome da página precisa ser igual ao nome da caixa na base (ex.: <span class="mono">sacola P_molde</span>). Se o seu PDF já tem a marca de registro desenhada, marque <b>Este PDF já tem marca de registro</b>, senão sai marca dobrada.</div></li>
+          <li><div><b class="t">Textos e salvar</b>Posicione nome e idade (<b>Posição dos textos</b>), escolha o estilo (<b>Estilo do texto</b>) e salve.</div></li>
+        </ol>
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/tema-pronto.jpg" alt="Tema pronto na etapa Páginas com aviso de página sem caixa de mesmo nome" loading="lazy"></button>
+          <figcaption><b>Páginas:</b> o aviso “Página 1 não tem caixa com esse nome na base” some quando você dá à página o nome da caixa.</figcaption>
+        </figure>
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/tema-pronto-salvar.jpg" alt="Tema pronto salvo com 8 páginas e o painel Este tema gera" loading="lazy"></button>
+          <figcaption><b>Textos e salvar:</b> o tema pronto já aparece em todas as caixas da base.</figcaption>
+        </figure>
+        <div class="note warn"><span class="lbl">Atenção</span><p>Em base de arte pronta, a arte fica por cima. Se precisar colocar um elemento a mais, coloque na arte antes de subir.</p></div>
+      </section>
+
+      <!-- 06 -->
+      <section id="pedidos">
+        <div class="sec-n">06 · Rotina do dia</div>
+        <h2>Pedidos e edição em massa</h2>
+        <p class="intro">Clique em <span class="btn">Pedidos (massa)</span>. Os pedidos do SOA chegam com tema, nome, idade e quantidade. Você confere linha por linha e gera.</p>
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/pedidos.jpg" alt="Tela Pedidos e edição em massa com filtros, dois pedidos selecionados e botão Gerar (2)" loading="lazy"></button>
+          <figcaption>Cada linha: pedido, tema, nome, idade, campos, quantidade, ações (<b>Ver</b>, <b>Ajustar</b>, <b>Gerar</b>) e o status da arte.</figcaption>
+        </figure>
+
+        <ol class="steps">
+          <li><div><b class="t">Filtre o que vai sair hoje</b>Use a busca e os filtros rápidos: <b>Despacha hoje</b>, <b>Até amanhã</b>, <b>Atrasados</b>, <b>Data de envio</b>, <b>Sem tema vinculado</b>, <b>Sem nome</b>, <b>Aguardando dados</b>, <b>Letra faltando</b>. Salve os filtros que você usa sempre.</div></li>
+          <li><div><b class="t">Confira o tema</b>Se o tema do pedido não for achado sozinho, escolha na busca da linha (<b>Vincular tema</b>). O MAE lembra a escolha nas próximas vezes.</div></li>
+          <li><div><b class="t">Confira nome, idade e quantidade</b>Edite direto na linha. Lembre: <b>QTD = total de peças</b> que a cliente recebe.</div></li>
+          <li><div><b class="t">Veja antes de imprimir</b><b>Ver</b> mostra a arte com o nome do pedido. <b>Ajustar</b> abre o editor só para aquele pedido (nome longo, acento, posição).</div></li>
+          <li><div><b class="t">Gere</b>Um pedido: <span class="btn or">Gerar</span> na linha. Vários: marque as linhas (ou <b>Selecionar aprovados</b>) e clique em <span class="btn or">Gerar (N)</span>.</div></li>
+          <li><div><b class="t">Marque como impresso</b>Depois de imprimir, <b>Marcar como impresso</b>. Os pedidos gerados ficam na aba <b>Já gerados</b>.</div></li>
+        </ol>
+
+        <div class="note gold"><span class="lbl">Dois nomes no mesmo pedido</span><p>Pedido de irmãos ou gêmeos, com dois temas ou dois nomes? Use <b>Dividir</b> na linha: cada parte ganha seu nome, idade, tema e quantidade, e as duas saem com o mesmo número de pedido.</p></div>
+      </section>
+
+      <!-- 07 -->
+      <section id="gerar">
+        <div class="sec-n">07 · Saída</div>
+        <h2>Gerar, imprimir e cortar</h2>
+        <figure class="shot narrow"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/gerar.jpg" alt="Janela Gerar 2 pedidos com as opções de arquivos, ordem das páginas e na folha" loading="lazy"></button>
+          <figcaption><b>Janela Gerar:</b> o resumo no fim mostra quantos arquivos vão sair.</figcaption>
+        </figure>
+
+        <div class="tbl"><table>
+          <thead><tr><th>Opção</th><th>Quando usar</th></tr></thead>
+          <tbody>
+            <tr><td><b>Um PDF por pedido</b></td><td>Cada cliente no seu arquivo (<span class="mono">Nome_idade_Tema_quantidade.pdf</span>), na pasta <span class="mono">Exportações / data / Pedidos</span>.</td></tr>
+            <tr><td><b>Juntar os pedidos (lote)</b></td><td>Vários pedidos num PDF só, na quantidade certa de cada um. Um start na impressora. Pasta <span class="mono">Exportações / data / LOTES</span>.</td></tr>
+            <tr><td><b>Um PDF por tipo de produto</b></td><td>Separa pegue e monte, tags e etiquetas em arquivos diferentes (papéis diferentes). Desligado: tudo num PDF.</td></tr>
+            <tr><td><b>A mesma caixa junta</b></td><td>Todas as MILK, depois todos os CUBOS… Corta em sequência sem trocar o arquivo de corte. <b>Intercalar temas</b> evita dois do mesmo tema colados.</td></tr>
+            <tr><td><b>O kit de cada cliente junto</b></td><td>Todas as caixas de um pedido seguidas.</td></tr>
+            <tr><td><b>Nome do pedido na margem</b></td><td>Imprime “#123 · Naty” fora do corte, para separar os kits.</td></tr>
+            <tr><td><b>Aproveitar folhas</b></td><td>Completa folhas de tags e etiquetas com peças de outros pedidos, sem desperdiçar papel.</td></tr>
+            <tr><td><b>Passar para a etapa Impressão no SOA</b></td><td>Atualiza o status do pedido no SOA ao gerar.</td></tr>
+          </tbody>
+        </table></div>
+
+        <figure class="shot"><span class="rm1"></span><span class="rm2"></span>
+          <button type="button" data-zoom><img src="img/pasta-lotes.jpg" alt="Pasta Biblioteca MAE / Exportações / data / LOTES no Dropbox com os PDFs gerados" loading="lazy"></button>
+          <figcaption><b>Onde ficam os arquivos:</b> <span class="mono">Biblioteca MAE / Exportações / AAAA-MM-DD / Pedidos</span> ou <span class="mono">LOTES</span>. O nome do lote já diz o dia, a hora, o produto, quantos pedidos e quantas páginas.</figcaption>
+        </figure>
+
+        <h3>Na hora de imprimir</h3>
+        <ul class="check">
+          <li><div>Abra o PDF e confira a primeira página de cada tema.</div></li>
+          <li><div>Imprima em <b>Tamanho real / 100%</b>. Nunca “ajustar à página”: muda o tamanho e a máquina erra o corte.</div></li>
+          <li><div>Primeira vez com uma caixa ou marca nova? Corte uma folha antes do lote inteiro.</div></li>
+          <li><div>Imprimiu? <b>Marcar como impresso</b> no MAE.</div></li>
+        </ul>
+      </section>
+
+      <!-- 08 -->
+      <section id="regras">
+        <div class="sec-n">08 · Para não errar</div>
+        <h2>Regras de ouro</h2>
+        <ol class="steps">
+          <li><div><b class="t">Base ligada ao produto do SOA.</b>Sem produto ligado, sai 1 unidade.</div></li>
+          <li><div><b class="t">QTD do pedido = total de peças.</b>Kit de 10 × 1 = 10.</div></li>
+          <li><div><b class="t">Nome do tema = campo TEMA do pedido.</b>Assim o pedido acha o tema sozinho.</div></li>
+          <li><div><b class="t">Salve e espere o “Salvo há…”.</b>Só saia do tema depois de ver a confirmação no topo.</div></li>
+          <li><div><b class="t">Teste com nome curto e comprido.</b>Ana e Maria Eduarda mostram tudo o que pode dar errado.</div></li>
+          <li><div><b class="t">“Ver” antes de imprimir.</b>Um minuto de conferência economiza uma folha.</div></li>
+          <li><div><b class="t">Tamanho real, 100%.</b>Sempre.</div></li>
+        </ol>
+      </section>
+
+      <!-- 09 -->
+      <section id="duvidas">
+        <div class="sec-n">09 · Socorro rápido</div>
+        <h2>Dúvidas comuns</h2>
+
+        <details class="faq"><summary>Gerou só 1 unidade (ou 1 folha), mas o pedido é de mais.</summary><div><p>Confira se a base está ligada ao produto do SOA (Grupos de produto / Produto do SOA) e se a QTD do pedido é o total de peças. Depois clique em <b>Gerar de novo</b>.</p></div></details>
+        <details class="faq"><summary>O pedido aparece com “tema não encontrado”.</summary><div><p>O nome do tema não bate com o campo TEMA do pedido. Escolha o tema na busca da linha (ele fica lembrado) ou renomeie o tema igual ao do anúncio.</p></div></details>
+        <details class="faq"><summary>O botão Gerar fica em “Gerar (0)”.</summary><div><p>Os pedidos selecionados estão com dados faltando (NOME, IDADE) ou “Aguardando dados”. Complete os dados na linha, ou use o <b>Gerar</b> de cada linha.</p></div></details>
+        <details class="faq"><summary>O nome saiu pequeno demais.</summary><div><p>Veja o aviso “fonte reduzida para X%” na linha. Abaixo de uns 60%, aumente a área do nome naquela caixa ou use 2 linhas para nome composto.</p></div></details>
+        <details class="faq"><summary>A idade ficou longe do nome.</summary><div><p>A área do nome (caixinha pontilhada) está alta demais naquela caixa. Diminua a altura dela com “Só nesta caixa”.</p></div></details>
+        <details class="faq"><summary>Mudei uma caixa e mudou tudo (ou o contrário).</summary><div><p>Com <b>Editar todas as caixas</b>, a mudança vai para todas. Para mudar uma só, clique na caixa na folha (aparece “Editando só: …”) ou segure Alt ao soltar o papel. <b>Voltar ao padrão</b> desfaz o ajuste daquela caixa.</p></div></details>
+        <details class="faq"><summary>O corte saiu deslocado.</summary><div><p>Faça o ajuste fino da marca de registro (seção 03) e imprima a folha de teste. Confira também se imprimiu em 100%.</p></div></details>
+        <details class="faq"><summary>Apareceu “fonte não instalada”.</summary><div><p>A fonte do tema não está neste computador. Instale a fonte e recarregue a página.</p></div></details>
+        <details class="faq"><summary>O MAE não abre ou não acha minha pasta.</summary><div><p>Use o Chrome ou o Edge no computador. Se pedir, clique para liberar o acesso à pasta Biblioteca MAE (o navegador pede a cada sessão).</p></div></details>
+      </section>
+
+      <!-- 10 -->
+      <section id="glossario">
+        <div class="sec-n">10 · Palavras do método</div>
+        <h2>Glossário</h2>
+        <dl class="glos">
+          <dt>Base</dt><dd>O kit montado uma vez: moldes, folhas, partes e posições do nome. Usada em todos os temas desse kit.</dd>
+          <dt>Prancheta</dt><dd>A folha física em mm (A4, A5 ou personalizada).</dd>
+          <dt>Molde</dt><dd>O desenho de uma peça (milk, triangulove, sacola P…), com linhas de corte e dobra.</dd>
+          <dt>Face</dt><dd>Cada região fechada do molde (a frente da milk, por exemplo).</dd>
+          <dt>Parte</dt><dd>O nome que junta faces equivalentes de vários moldes: FRENTE, FUNDO, LATERAL… O que entra numa parte aparece em todas as faces dela.</dd>
+          <dt>Aba</dt><dd>Face sem parte. Recebe o papel das abas.</dd>
+          <dt>Tema</dt><dd>Papéis, elementos e estilo do nome aplicados sobre uma base.</dd>
+          <dt>Tema pronto</dt><dd>Tema criado a partir de um PDF de arte que você já tem.</dd>
+          <dt>Só nesta caixa</dt><dd>Mudança que vale para uma caixa só; as outras continuam iguais.</dd>
+          <dt>Grupo de produto</dt><dd>Parte da base ligada a um produto do SOA (Kit Festa, Sacola P…).</dd>
+          <dt>Marca de registro</dt><dd>O arquivo da sua máquina de corte, colocado na folha em tamanho real, para o print and cut.</dd>
+          <dt>Arte inteligente</dt><dd>A sobra da arte além da linha de corte, para não ficar filete branco.</dd>
+          <dt>Lote</dt><dd>Vários pedidos num PDF só, na quantidade certa de cada um.</dd>
+        </dl>
+      </section>
+    </main>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">Método MAE · SOA — guia de uso. Os prints são do sistema real; nomes de clientes foram ocultados. O MAE recebe melhorias toda semana: se uma tela estiver um pouco diferente, o caminho continua o mesmo.</div>
+</footer>
+
+<dialog id="zoom" aria-label="Print ampliado">
+  <button type="button" id="zoom-close" aria-label="Fechar">×</button>
+  <img id="zoom-img" alt="">
+</dialog>
+
+<script>
+(function(){
+  var d=document.getElementById('zoom'), im=document.getElementById('zoom-img');
+  document.querySelectorAll('[data-zoom]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var src=b.querySelector('img'); im.src=src.src; im.alt=src.alt;
+      if(d.showModal){d.showModal();}else{window.open(src.src,'_blank');}
+    });
+  });
+  document.getElementById('zoom-close').addEventListener('click',function(){d.close();});
+  d.addEventListener('click',function(e){ if(e.target===d) d.close(); });
+})();
+</script>

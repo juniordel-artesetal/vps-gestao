@@ -3451,3 +3451,59 @@ O doc está em `docs/mae-ajustes-lote-19.md`. **Decisão do Júnior:** fazer o l
 1. Gerar de novo o lote Antonella (Moana) + Antonny (Pooh) e conferir que o corpo da Antonella sai igual ao gerado sozinho.
 2. Pedido com 2 nomes (Ayla Maria e Aylin Maria): "Usar 2 nomes?" → escolher o modo.
 3. Base cortada com faca: Marca de registro → "Com faca" → imprimir a folha de teste → digitar onde a faca cortou → "Calcular o ajuste".
+
+## Lote 20 — página de vendas e Central de Ajuda (15/10/2026) · itens 246 e 247
+
+O doc está em `docs/mae-ajustes-lote-20.md` (+ `docs/mae-central-de-ajuda.md` e `docs/guia-referencia/`).
+
+**Decisões do Júnior (15/10), por cima do doc:**
+- o site fica em `usesoa.com.br/mae` (caminho, não subdomínio) e foi publicado já;
+- os preços já aparecem (sem a chave `MAE_PRECOS_VISIVEIS`);
+- planos: só o MAE mensal/anual, SOA + MAE mensal/anual (a soma dos dois) e a troca do SOA mensal para o anual;
+- o plano "Aluna Método MAE ou VPS" (R$ 49,90) ficou fora: o checkout não tem como conferir quem é aluna.
+
+### 247 — página de vendas `usesoa.com.br/mae` (no ar)
+- Pública, sem login, feita para o celular (`app/mae/page.tsx` + `app/mae/SiteMae.tsx`). Usa a copy do doc palavra por palavra e os prints reais do guia em `/mae/img`, com `loading="lazy"`.
+- **Preços** lidos da mesma config do checkout (nada fixo na página):
+  - SOA + Método MAE: R$ 89,80/mês (SOA R$ 49,90 + MAE R$ 39,90) ou R$ 753/ano (R$ 370 + R$ 383), ou 12× de R$ 75,13;
+  - só o Método MAE: R$ 59,90/mês ou R$ 503/ano, ou 12× de R$ 50,19;
+  - troca do SOA mensal para o anual: R$ 370 ou 12× de R$ 36,92.
+- **Botões:**
+  - "Já assino o SOA" → `/mae/assinatura` (o MAE soma ao SOA);
+  - "Ainda não tenho o SOA" → `/register`;
+  - "Assinar só o Método MAE" → `/mae/cadastro`;
+  - "Trocar para o anual" → `/assinatura/migrar-anual`.
+  - O "SOA + MAE" não virou um produto novo no Asaas: são as duas assinaturas que já existem (o checkout leva o valor de cada uma).
+- **Rastreio:** evento do Meta Pixel `CliqueMetodoMae` com o nome do botão.
+- Calculadora de horas (opcional do doc), FAQ em acordeão e aviso da live até 3 h depois das 20h de 16/10.
+- **Contato:** WhatsApp se `MAE_WHATSAPP_URL` estiver configurado; senão, o "Fale com a gente" (chamado público).
+- **Sem foto da Naty e sem depoimentos:** não vieram, e o doc manda sair sem.
+- **Guia ilustrado completo publicado em `usesoa.com.br/mae/guia.html`:** o mesmo HTML do guia de referência, que a página linka em "Como usar" e no FAQ.
+- Link "Método MAE" no menu do site do SOA (`app/landing/LandingClient.tsx`).
+- **Antes das 20h de 16/10** os botões de compra levam às telas, mas o checkout ainda responde "em breve" (a venda abre sozinha no horário).
+
+### Troca do SOA mensal → anual (nova, pedido do Júnior)
+- **Tela:** `/assinatura/migrar-anual`, com link em "Minha assinatura" para quem está em dia.
+- **Quem pode:** assinante Asaas ATIVA com a mensal viva no cartão e em dia. Hotmart, teste e atraso → mensagem para falar com a gente.
+- **Checkout do anual:** a 1ª cobrança cai **no dia do vencimento da mensal**, então o mês pago é respeitado e nada se sobrepõe. Cartão, até 12×, com o split da parceira.
+- **No `CHECKOUT_PAID`** (`lib/assinatura/migracaoAnual.ts`, ramo próprio no webhook):
+  - o Workspace passa a apontar para o checkout do anual;
+  - a mensal sai da conta (`AsaasAssinatura` CANCELADA, "migracao-anual") e é **apagada no Asaas** junto com a cobrança pendente dela;
+  - o `SUBSCRIPTION_DELETED` dessa mensal **não** cancela a conta.
+- Se o Asaas recusar apagar a mensal, o cron de assinaturas (de hora em hora) tenta de novo.
+- **Tabela `SoaMigracaoAnual`** (`scripts/migrar-soa-migracao-anual.mjs`), criada no neondb em 15/10.
+- **Pendente:** teste com cartão real.
+
+### 246 — Central de Ajuda
+Ainda não foi feita: só o guia completo está no ar, em `/mae/guia.html`. Próximo passo: artigos em Markdown, busca com sinônimos e erro de digitação, e o "?" contextual do editor.
+
+### Testes
+- Vitest `lib/__tests__/migracaoAnual.test.ts` (7). Suíte: 684 ok. tsc limpo; build ok.
+- **Chrome** `fabtest/ui_site_mae.mts`:
+  - celular (400 px) e computador sem rolagem lateral;
+  - os preços dos planos;
+  - cada botão no destino certo;
+  - nenhum `[PREENCHER]`;
+  - 8 prints carregando;
+  - FAQ e calculadora funcionando;
+  - guia abrindo com os 24 prints.

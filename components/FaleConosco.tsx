@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import { LifeBuoy, X, Check, Loader2 } from 'lucide-react'
 
-export default function FaleConosco({ emailInicial = '', variante = 'link' as 'link' | 'card' }: { emailInicial?: string; variante?: 'link' | 'card' }) {
+export default function FaleConosco({ emailInicial = '', variante = 'link' as 'link' | 'card', rotulo = 'Está com problema pra acessar? Fale com a gente' }: { emailInicial?: string; variante?: 'link' | 'card'; rotulo?: string }) {
   const [aberto, setAberto] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
@@ -35,12 +35,12 @@ export default function FaleConosco({ emailInicial = '', variante = 'link' as 'l
       {variante === 'card' ? (
         <button type="button" onClick={abrir}
           className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-xl px-4 py-3 shadow-sm transition">
-          <LifeBuoy size={17} /> Está com problema pra acessar? Fale com a gente
+          <LifeBuoy size={17} /> {rotulo}
         </button>
       ) : (
         <button type="button" onClick={abrir}
           className="inline-flex items-center gap-2 text-sm font-semibold text-orange-600 hover:text-white hover:bg-orange-600 border-2 border-orange-400 hover:border-orange-600 rounded-full px-5 py-2.5 transition shadow-sm">
-          <LifeBuoy size={17} /> Está com problema pra acessar? Fale com a gente
+          <LifeBuoy size={17} /> {rotulo}
         </button>
       )}
 
