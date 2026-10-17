@@ -8,7 +8,7 @@ import { useDocVisivel } from './textosDoTemaUi'
 import { usePedidoAberto, ajustarTextoDoPedido } from './pedidosMae'
 import Deslizador, { useValorAoVivo } from './Deslizador'
 import { listarImagens, infoImagem, infoEmCache } from './arquivosMae'
-import { useLado, painelClassico } from './Funcoes'
+import { useLado, painelClassico, Bloco } from './Funcoes'
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Type, Unlock, Loader2, Trash2 } from 'lucide-react'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
@@ -138,6 +138,12 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
   // o layout antigo (mae:painel-classico = '1') mostra tudo empilhado, sem abas
   const classico = painelClassico()
   const setAba = (a: AbaTexto) => { setAbaEstado(a); try { sessionStorage.setItem('mae:aba-texto', a) } catch { /* sem sessionStorage: só não lembra */ } }
+  // Lote 21 (item 256): a busca de função pede a sub-aba do controle achado
+  useEffect(() => {
+    const ir = (e: Event) => { const a = (e as CustomEvent<string>).detail; if (ABAS_TEXTO.some(x => x.id === a)) { setAbaEstado(a as AbaTexto); try { sessionStorage.setItem('mae:aba-texto', a) } catch { /* ok */ } } }
+    window.addEventListener('mae:aba-texto', ir)
+    return () => window.removeEventListener('mae:aba-texto', ir)
+  }, [])
   const [modoNome, setModoNome] = useState<'simples' | 'composto'>(() => (String(useMaeTema.getState().hist?.atual.sample?.NOME ?? '').trim().split(/\s+/).length >= 2 ? 'composto' : 'simples'))
   useEffect(() => { if (permissao === 'desconhecida') void listarLocais(false) }, [permissao])
   if (!tema) return null
@@ -226,6 +232,7 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
 
       {/* ── FONTE ── */}
       <div className="space-y-2" hidden={!classico && aba !== 'fonte'} data-aba-conteudo="fonte">
+      <Bloco id="texto-fonte" titulo="Fonte, tamanho e cor">
       <div className="rounded-lg bg-gray-50 dark:bg-gray-800/60 p-2 space-y-1.5" data-estilo-texto>
         <div className="flex items-center gap-1">
           <SeletorFonte atual={{ valor: `${estilo.font.source}|${estilo.font.postscriptName}`, family: estilo.font.family ?? estilo.font.postscriptName }} locais={locais} amostra={variavel === 'HASHTAG' ? valor : (tema.sample?.NOME ?? 'Ana Júlia')}
@@ -290,16 +297,18 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
         )}
       </div>
 
+      </Bloco>
       {/* Lote 17 (item 213): cor por letra + letras brincando */}
-      <CorPorLetra estilo={estilo} mudar={mudar} />
+      <Bloco id="texto-cor-letra" titulo="Cor por letra" aberto={false}><CorPorLetra estilo={estilo} mudar={mudar} /></Bloco>
       {/* Lote 10 (item 163): fonte sem acento */}
-      <MontarAcentos estilo={estilo} mudar={mudar} fonte={fonte} />
+      <Bloco id="texto-acentos" titulo="Acentos (fonte sem acento)" aberto={false}><MontarAcentos estilo={estilo} mudar={mudar} fonte={fonte} /></Bloco>
       {/* no pedido, a troca de letra é a da barra do Ajustar (só neste pedido) */}
-      {!modoPedido && <TrocarLetra estilo={estilo} mudar={mudar} fonte={fonte} />}
+      {!modoPedido && <Bloco id="texto-trocar-letra" titulo="Trocar letra (glifos)" aberto={false}><TrocarLetra estilo={estilo} mudar={mudar} fonte={fonte} /></Bloco>}
       </div>
 
       {/* ── EFEITOS ── */}
       <div className="space-y-2" hidden={!classico && aba !== 'efeitos'} data-aba-conteudo="efeitos">
+      <Bloco id="texto-efeitos" titulo="Contorno, sombra e brilho">
       {/* Lote 4 (item 50): com "efeitos próprios do nome composto", o editor mexe nos do composto */}
       {(() => {
         const doComposto = (variavel === 'NOME' || variavel === 'NOME_IDADE') && modoNome === 'composto' && !!estilo.efeitosComposto
@@ -312,14 +321,19 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
       })()}
       {/* Lote 14 (item 197): os estilos acompanham o tamanho do texto (o nome que encolhe para caber afina o contorno junto) */}
       <label className="flex items-center gap-1.5 text-[11px] text-gray-600" title="Ligado: contorno, sombra e brilho acompanham o tamanho do texto (como o Dimensionar estilos do Photoshop). Desligado: espessura fixa."><input type="checkbox" className="accent-orange-500" checked={estilo.escalarEstilos !== false} onChange={e => mudar(e.target.checked ? 'Escalar estilos junto' : 'Estilos com espessura fixa', x => { if (e.target.checked) delete (x as { escalarEstilos?: boolean }).escalarEstilos; else (x as { escalarEstilos?: boolean }).escalarEstilos = false })} data-escalar-estilos-texto /> Escalar estilos junto</label>
+      </Bloco>
       {/* Lote 5 (itens 74/75): fundo atrás do texto e trocar letra */}
+      <Bloco id="texto-faixa" titulo="Faixa atrás do nome" aberto={!!estilo.fundo}>
       <FundoDoTexto estilo={estilo} mudar={mudar} />
       {estilo.fundo?.tipo === 'retangulo' && (
         <EditorEfeitos key="ef-fundo" efeitos={(estilo.fundo.effects ?? []) as never} titulo={`Estilos da faixa do ${variavel}`}
           onMudar={(efs, label, j) => mudar(label, e => { if (e.fundo) e.fundo.effects = efs as never }, j ? `fundo:${j}` : undefined)} />
       )}
+      </Bloco>
       {/* Lote 4 (item 51): textura de papel dentro do texto (máscara de corte), estilos por cima */}
+      <Bloco id="texto-papel" titulo="Papel dentro do texto" aberto={!!estilo.textura}>
       <PreencherComPapel textura={estilo.textura} onMudar={(t, label, j) => mudar(label, e => { if (t) e.textura = t; else delete e.textura }, j)} />
+      </Bloco>
       </div>
 
       {/* ── ENFEITE ── Lote 17 (item 214): o enfeite preso ao nome */}

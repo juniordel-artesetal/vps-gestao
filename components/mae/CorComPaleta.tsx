@@ -64,7 +64,7 @@ export default function CorComPaleta({ value, onChange, className, title, ...dad
   const paleta = usePaletaDoTema(aberta)
   useEffect(() => {
     if (!aberta) return
-    const fechar = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest?.('[data-paleta-tema]')) setAberta(false) }
+    const fechar = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest?.('[data-cor-com-paleta]')) setAberta(false) }
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setAberta(false) }
     window.addEventListener('pointerdown', fechar); window.addEventListener('keydown', esc)
     return () => { window.removeEventListener('pointerdown', fechar); window.removeEventListener('keydown', esc) }
@@ -74,7 +74,7 @@ export default function CorComPaleta({ value, onChange, className, title, ...dad
       onClick={() => { onChange(c); setAberta(false) }} title={`${rotulo} ${c.toUpperCase()}`} aria-label={`${rotulo} ${c}`} data-cor-paleta={c} />
   )
   return (
-    <span className="relative inline-flex items-center gap-0.5" data-paleta-tema>
+    <span className="relative inline-flex items-center gap-0.5" data-cor-com-paleta>
       <input type="color" value={value} onChange={e => onChange(e.target.value)} className={className} title={title} {...dados} />
       {temTema && <button type="button" className="rounded border border-gray-200 px-0.5 text-[9px] leading-4 text-gray-500 hover:border-orange-400 hover:text-orange-700" onClick={() => setAberta(!aberta)} title="Paleta do tema (os tons dos papéis e elementos)" aria-label="Paleta do tema" data-abrir-paleta>🎨</button>}
       {aberta && (

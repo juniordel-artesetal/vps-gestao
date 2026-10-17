@@ -45,7 +45,7 @@ import { RascunhoAutomatico, IndicadorSalvamento, RecuperarRascunhos, ProtecaoEr
 import { AvisoVersaoNova } from './VersaoApp'
 import { PerguntaSalvar, confirmarTroca, desfazerGlobal, refazerGlobal, useRotulosHistorico } from './historicoGlobal'
 import TextosDoPedido from './TextosDoPedido'
-import { BarraFuncoes, BarraOpcoes, LadoPainel, TituloFuncao, painelClassico } from './Funcoes'
+import { BarraFuncoes, BarraOpcoes, BuscaFuncao, LadoPainel, TituloFuncao, painelClassico } from './Funcoes'
 import { PainelDesign, ExportarImagem } from './EditorImagemMae'
 import { materializar, fontesDosTextos } from '@/lib/mae/editor/materializar'
 import { garantirFontes, garantirFontesDosValores } from './fontesTexto'
@@ -769,6 +769,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
         {/* painel da função aberta (fica montado mesmo fechado: a exportação em andamento não se perde) */}
         {comFuncoes && (
           <aside className={`w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 space-y-4 overflow-y-auto ${funcao && !semPaineis && !emAjuste ? '' : 'hidden'}`} data-painel-funcao={funcao ?? ''}>
+            <BuscaFuncao modo={modoEd} />
             <TituloFuncao modo={modoEd} />
             <ProtecaoErro nome="Painel da função">
             <LadoPainel lado="funcoes">

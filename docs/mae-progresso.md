@@ -3678,3 +3678,16 @@ Doc: `docs/mae-ajustes-lote-22.md`. Contas de teste em produção: teste.somae@u
   - `paletaDoTema.test.ts` (5) e suíte com 755 passando;
   - `ui_mae_lote23` sem falhas: clique, Aplicar em, pincel, Esc, tela cheia com busca, paleta (rosa → entra o azul → rosa + azul) e clique no tom aplica;
   - regressão sem falhas nos Lotes 16, 19 e 21. O `ZodError` no console do lote16 já existia antes.
+
+## Lote 21 · Fase 2 (17/10/2026) — item 256: painéis organizados
+- **Busca de função "O que você quer fazer?"** fica no topo do painel de funções. O 🔍 no alto da barra de ícones abre o painel com o foco na busca.
+  - Digitar "acento", "contorno", "laço" ou "2 linhas" (com ou sem acento) lista os controles; Enter ou clique abre a função, a sub-aba do Texto e o bloco recolhido, rola até o controle e o destaca com um contorno laranja por 2,5 s.
+  - As setas navegam entre os resultados.
+  - As funções da barra também entram na busca, pelo nome e pela frase (Base e Tema, cada uma com as suas).
+  - O índice fica em `lib/mae/editor/buscaFuncao.ts` (puro, 23 controles com sinônimos).
+- **Blocos recolhíveis** no Texto (`Bloco` em `Funcoes.tsx`), com o título sempre visível e o aberto/fechado lembrado na sessão:
+  - **Fonte:** "Fonte, tamanho e cor" aberto; "Cor por letra", "Acentos" e "Trocar letra" fechados.
+  - **Efeitos:** "Contorno, sombra e brilho" aberto; "Faixa" e "Papel dentro do texto" abrem sozinhos quando o texto já usa.
+  - No painel clássico continua tudo empilhado, como antes.
+- **Não feito neste item:** sub-abas novas em Camadas e Base. A Base já é uma função por etapa e Papéis já tem Papéis/Elementos/Cor; fica para quando houver pedido concreto.
+- **Testes:** `buscaFuncao.test.ts` (12) e suíte com 766 passando; a única falha é o teste de tempo instável sob carga, que passa sozinho (22/22). No `ui_mae_lote23`, as 4 buscas do pedido abrem, mostram e destacam o controle, além dos blocos e da busca vazia. Regressão sem falhas nos Lotes 17, 18, 19 e 21.

@@ -5,11 +5,12 @@
 // ativo destacado e a dica de cada um. O painel da DIREITA fica com as PROPRIEDADES do que está selecionado.
 // Os painéis existentes (Base, Tema, Exportar…) continuam um componente só: cada parte deles fica dentro de
 // <Secao ids={[…]}>, que aparece quando a função dela está aberta. O MAE lembra o último painel por aba.
-import { createContext, useContext, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import OpcoesFerramenta from './OpcoesFerramenta'
-import { Ruler, FileUp, LayoutGrid, Shapes, Puzzle, Crop, Type, IdCard, Wand2, Save, Crosshair, Image as ImagemIc, Sticker, Palette, Layers, Frame, Blend, Box, Printer, Store, FileImage, Square, FolderTree, Grid3x3, Move, CircleDot, Link2 } from 'lucide-react'
+import { Ruler, FileUp, LayoutGrid, Shapes, Puzzle, Crop, Type, IdCard, Wand2, Save, Crosshair, Image as ImagemIc, Sticker, Palette, Layers, Frame, Blend, Box, Printer, Store, FileImage, Square, FolderTree, Grid3x3, Move, CircleDot, Link2, Search, ChevronRight } from 'lucide-react'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { useEditor, type ModoEditor } from './estado'
+import { buscarFuncao, type EntradaBusca } from '@/lib/mae/editor/buscaFuncao'
 
 export interface Funcao { id: string; nome: string; frase: string; Icone: typeof FileUp; passo?: number }
 
@@ -120,6 +121,12 @@ export function BarraFuncoes({ modo }: { modo: Exclude<ModoEditor, 'imagem'> }) 
   }
   return (
     <nav className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 py-2 overflow-y-auto" data-barra-funcoes>
+      {/* Lote 21 (item 256): "o que você quer fazer?" — abre o painel com a busca */}
+      <button onClick={() => { if (!useEditor.getState().funcao) useEditor.getState().set({ funcao: PADRAO[modo] }); setTimeout(() => window.dispatchEvent(new Event('mae:focar-busca')), 30) }} aria-label="Buscar função"
+        className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-orange-50 hover:text-orange-700 dark:text-gray-300" title="O que você quer fazer? (buscar função)" data-abrir-busca-funcao>
+        <Search className="w-4.5 h-4.5" />
+      </button>
+      <span className="h-px w-6 bg-gray-200 dark:bg-gray-700" />
       {lista.map(fn => (
         <button key={fn.id} onClick={() => abrir(fn)} aria-label={fn.nome} aria-pressed={funcao === fn.id}
           className={`flex h-9 w-9 items-center justify-center rounded-lg ${funcao === fn.id ? 'bg-orange-500 text-white shadow' : 'text-gray-600 hover:bg-orange-50 hover:text-orange-700 dark:text-gray-300'}`}
@@ -168,4 +175,93 @@ export function TituloFuncao({ modo }: { modo: Exclude<ModoEditor, 'imagem'> }) 
   const fn = FUNCOES[modo].find(x => x.id === funcao)
   if (!fn) return null
   return <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-white" data-titulo-funcao><fn.Icone className="w-4 h-4 text-orange-500" /> {fn.nome}</p>
+}
+
+/**
+ * Lote 21 (item 256): BLOCO RECOLHÍVEL dentro de um painel — o título fica sempre visível; os mais usados começam
+ * abertos. Lembra aberto/fechado na sessão. No painel clássico (tudo empilhado) mostra só o conteúdo, como antes.
+ */
+export function Bloco({ id, titulo, aberto = true, children }: { id: string; titulo: string; aberto?: boolean; children: ReactNode }) {
+  const [ab, setAb] = useState(() => { try { const v = sessionStorage.getItem(`mae:bloco:${id}`); return v === null ? aberto : v === '1' } catch { return aberto } })
+  if (painelClassico()) return <>{children}</>
+  return (
+    <details open={ab} onToggle={e => { const o = e.currentTarget.open; if (o !== ab) { setAb(o); try { sessionStorage.setItem(`mae:bloco:${id}`, o ? '1' : '0') } catch { /* sem sessionStorage */ } } }}
+      className="group rounded-lg border border-gray-200 dark:border-gray-700" data-bloco={id}>
+      <summary className="flex cursor-pointer select-none list-none items-center gap-1 px-2 py-1.5 text-[11px] font-semibold text-gray-700 hover:text-orange-700 dark:text-gray-200 [&::-webkit-details-marker]:hidden" data-bloco-titulo={id}>
+        <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" /> {titulo}
+      </summary>
+      <div className="space-y-2 px-1.5 pb-2">{children}</div>
+    </details>
+  )
+}
+
+/** Abre a função, a sub-aba e o bloco do controle e destaca ele (o painel monta sozinho: espera até 2 s). */
+export function irParaControle(e: EntradaBusca) {
+  const ed = useEditor.getState()
+  ed.set({ funcao: e.funcao, ...(e.passo ? { passo: e.passo } : {}) })
+  try { localStorage.setItem(CHAVE(ed.modo), e.funcao) } catch { /* sem storage */ }
+  if (!e.alvo) return
+  const t0 = performance.now()
+  const tentar = () => {
+    const el = (document.querySelector(`[data-painel-funcao] ${e.alvo}`) ?? document.querySelector(e.alvo!)) as HTMLElement | null
+    if (!el) { if (performance.now() - t0 < 2000) setTimeout(tentar, 80); return }
+    // sub-aba escondida (Texto) → abre a aba; bloco fechado → abre o bloco
+    const aba = el.closest('[data-aba-conteudo]') as HTMLElement | null
+    if (aba?.hidden) window.dispatchEvent(new CustomEvent('mae:aba-texto', { detail: aba.dataset.abaConteudo }))
+    for (let d = el.closest('details'); d; d = d.parentElement?.closest('details') ?? null) if (!d.open) d.open = true
+    setTimeout(() => {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      el.setAttribute('data-destaque-busca', '')
+      const antes = el.style.outline, antesOff = el.style.outlineOffset
+      el.style.outline = '2px solid #f97316'; el.style.outlineOffset = '2px'
+      setTimeout(() => { el.style.outline = antes; el.style.outlineOffset = antesOff; el.removeAttribute('data-destaque-busca') }, 2500)
+    }, 60)
+  }
+  setTimeout(tentar, 30)
+}
+
+/** Lote 21 (item 256): "O que você quer fazer?" no topo do painel de funções. */
+export function BuscaFuncao({ modo }: { modo: Exclude<ModoEditor, 'imagem'> }) {
+  const [q, setQ] = useState('')
+  const [sel, setSel] = useState(0)
+  const ref = useRef<HTMLInputElement>(null)
+  const tipo = useMaeDoc(s => s.hist?.atual?.tipo), nFolhas = useMaeDoc(s => s.hist?.atual?.folhas?.length ?? 0)
+  const funcoes = modo === 'base' ? funcoesDaBase({ tipo, folhas: nFolhas ? [1] : [] }) : FUNCOES[modo]
+  const res = buscarFuncao(q, funcoes, modo)
+  useEffect(() => {
+    const focar = () => { ref.current?.focus(); ref.current?.select() }
+    window.addEventListener('mae:focar-busca', focar)
+    return () => window.removeEventListener('mae:focar-busca', focar)
+  }, [])
+  const escolher = (e: EntradaBusca) => { setQ(''); setSel(0); ref.current?.blur(); irParaControle(e) }
+  const nomeFn = (id: string) => funcoes.find(f => f.id === id)?.nome ?? id
+  return (
+    <div className="relative" data-busca-funcao>
+      <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 focus-within:border-orange-400 dark:border-gray-700 dark:bg-gray-800">
+        <Search className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+        <input ref={ref} value={q} onChange={e => { setQ(e.target.value); setSel(0) }} placeholder="O que você quer fazer? (ex.: acento, contorno, laço)"
+          onKeyDown={e => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); setSel(i => Math.min(i + 1, res.length - 1)) }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(i => Math.max(i - 1, 0)) }
+            else if (e.key === 'Enter' && res[sel]) { e.preventDefault(); escolher(res[sel]) }
+            else if (e.key === 'Escape') { setQ(''); ref.current?.blur() }
+            e.stopPropagation()
+          }}
+          className="w-full bg-transparent text-xs outline-none placeholder:text-gray-400" aria-label="Buscar função" data-input-busca-funcao />
+      </div>
+      {q.trim().length >= 2 && (
+        <ul className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900" role="listbox" data-resultados-busca={res.length}>
+          {res.map((r, i) => (
+            <li key={r.rotulo + r.funcao}>
+              <button role="option" aria-selected={i === sel} onMouseEnter={() => setSel(i)} onClick={() => escolher(r)}
+                className={`flex w-full items-baseline justify-between gap-2 rounded px-2 py-1 text-left text-xs ${i === sel ? 'bg-orange-50 text-orange-800 dark:bg-orange-950/40' : ''}`} data-resultado-busca={r.rotulo}>
+                <span>{r.rotulo}</span><span className="shrink-0 text-[10px] text-gray-400">{r.alvo ? nomeFn(r.funcao) : 'função'}</span>
+              </button>
+            </li>
+          ))}
+          {!res.length && <li className="px-2 py-1 text-[11px] text-gray-400">Nada com “{q}”. Tente outra palavra (ex.: fonte, papel, moldurinha).</li>}
+        </ul>
+      )}
+    </div>
+  )
 }
