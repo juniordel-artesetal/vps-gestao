@@ -13,7 +13,7 @@
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { OFERTA_ALUNAS, alunasAberta, precosAlunas, nomeDoItemAlunas, descricaoDoItemAlunas, marcaCheckoutAlunas, MARCA_COMPRA_ALUNAS, DIA_MARCA_ALUNAS, type OfertaMae } from './alunas'
-import { PLANO_COMBO, cobrancaCombo, jaPagaSoa, nomeDoItemCombo, descricaoDoItemCombo } from './combo'
+import { PLANO_COMBO, cobrancaCombo, jaPagaSoa, podeEntrarNoPacote, nomeDoItemCombo, descricaoDoItemCombo } from './combo'
 import { encerrarAssinaturasTrocadasPorPixAuto } from '@/lib/pagamento/asaas/pixAutomatico'
 import { criarLinkPixAuto, apagarLinkPixAuto, ehLinkDePagamento, pixAutoLigado } from '@/lib/pagamento/asaas/linkPixAuto'
 import { temAcesso } from '@/lib/assinatura'
@@ -128,8 +128,12 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
   const plano: PlanoMaeVenda = await planoDeVenda(p.workspaceId, estado)
   // Plano Alunas VPS (16/10/2026): preço próprio, com validade, uma compra por conta (ver ./alunas.ts). É para quem
   // NÃO assina o SOA: a assinante do SOA que vier pelo link entra no preço de assinante (add-on, R$ 39,90) — mais barato.
+  // SOA + MAE para quem ainda NÃO paga o SOA (em teste, atrasada, cancelada com acesso…): o PACOTE numa cobrança só —
+  // nunca o MAE de R$ 39,90 sem o SOA pago (16/10/2026)
+  if (plano === 'addon' && p.oferta !== OFERTA_ALUNAS && !(await contaJaPagaSoa(p.workspaceId)))
+    return criarCheckoutCombo({ workspaceId: p.workspaceId, ciclo: p.ciclo, parcelas: p.parcelas, baseUrl: p.baseUrl, metodo: p.metodo })
   const pedeAlunas = p.oferta === OFERTA_ALUNAS
-  const alunas = pedeAlunas && plano !== 'addon'
+  const alunas = pedeAlunas && (plano !== 'addon' || !(await contaJaPagaSoa(p.workspaceId)))
   const precos = (alunas ? precosAlunas() : precosMae())!
   if (alunas && !alunasAberta()) return { ok: false, erro: 'O link do Plano Alunas venceu em 31/10/2026.', status: 400 }
   if (alunas && await jaComprouAlunas(p.workspaceId)) return { ok: false, erro: 'Esta conta já comprou pelo Plano Alunas — o link vale uma compra por conta.', status: 400 }
@@ -240,6 +244,12 @@ export async function contaJaPagaSoa(ws: string): Promise<boolean> {
     SELECT "assinaturaStatus", "liberacaoManual" FROM "Workspace" WHERE "id" = ${ws} LIMIT 1`.catch(() => [])
   return !!w && jaPagaSoa(w)
 }
+/** O SOA desta conta pode ir para o PACOTE (ver podeEntrarNoPacote: fora só Hotmart ativa e liberação manual). */
+export async function contaPodeEntrarNoPacote(ws: string): Promise<boolean> {
+  const [w] = await prisma.$queryRaw<{ assinaturaStatus: string | null; assinaturaOrigem: string | null; liberacaoManual: boolean | null }[]>`
+    SELECT "assinaturaStatus", "assinaturaOrigem", "liberacaoManual" FROM "Workspace" WHERE "id" = ${ws} LIMIT 1`.catch(() => [])
+  return !!w && podeEntrarNoPacote(w)
+}
 
 /**
  * Checkout do PACOTE (um item só: SOA + Método Mãe). Só para quem ainda NÃO paga o SOA (sem conta, em teste, cortada,
@@ -249,7 +259,7 @@ export async function contaJaPagaSoa(ws: string): Promise<boolean> {
 export async function criarCheckoutCombo(p: { workspaceId: string; ciclo: CicloMae; parcelas?: number; baseUrl: string; metodo?: 'cartao' | 'pix' }): Promise<ResultadoCheckoutMae> {
   const precos = precosMae()
   if (!vendaMaeAtiva() || !precos) return { ok: false, erro: 'O Método Mãe ainda não está à venda.', status: 400 }
-  if (await contaJaPagaSoa(p.workspaceId)) return { ok: false, erro: 'Você já assina o SOA: o Método Mãe soma à sua assinatura por R$ 39,90/mês.', status: 409 }
+  if (!(await contaPodeEntrarNoPacote(p.workspaceId))) return { ok: false, erro: 'O seu SOA é cobrado fora do SOA (Hotmart ou liberação manual): o Método Mãe soma à sua assinatura por R$ 39,90/mês.', status: 409 }
   const estado = await estadoMaeDaConta(p.workspaceId)
   if (estado.moduloMae && estado.origem === 'cortesia') return { ok: false, erro: 'Esta conta já tem o Método Mãe liberado.', status: 400 }
   const atual = await assinaturaMaeDaConta(p.workspaceId)

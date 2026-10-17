@@ -75,7 +75,9 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
   // Lançamento 16/10/2026: quem assina o SOA compra "SOA + Método Mãe" (o MAE soma à assinatura do SOA, que continua como está)
   const titulo = standalone ? 'Método Mãe' : 'SOA + Método Mãe'
   const rotuloCiclo = (c: 'mensal' | 'anual') => (standalone ? (c === 'mensal' ? 'Mensal' : 'Anual') : c === 'mensal' ? 'SOA + Método Mãe · mensal' : 'SOA + Método Mãe · anual')
-  const mais = standalone ? '' : '+ '
+  // pacote (SOA ainda não pago): o preço é o do SOA + MAE, numa cobrança só — sem o "+"
+  const combo = !!(e as { combo?: boolean }).combo
+  const mais = standalone || combo ? '' : '+ '
   const parc = e.parcelamentoAnual.find(p => p.parcelas === parcelas) ?? e.parcelamentoAnual[0]
   const vivo = a && ['TRIAL', 'ATIVA'].includes(a.status)
   const pixMensal = !!e.pixAuto && metodo === 'pix' && a?.status !== 'INADIMPLENTE'
@@ -123,7 +125,7 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
             <button onClick={() => setCiclo('mensal')} className={`rounded-2xl border-2 p-4 text-left ${ciclo === 'mensal' ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700'}`} data-ciclo-mae="mensal">
               <p className="text-sm text-gray-500">{rotuloCiclo('mensal')}</p>
               <p className="text-2xl font-bold">{mais}{brl(e.precos.mensal)}<span className="text-sm font-normal text-gray-500">/mês</span></p>
-              {!standalone && <p className="text-xs text-gray-500">somado ao seu SOA, que continua como está</p>}
+              {!standalone && <p className="text-xs text-gray-500">{combo ? 'SOA + Método Mãe numa cobrança só' : 'somado ao seu SOA, que continua como está'}</p>}
             </button>
             <button onClick={() => setCiclo('anual')} className={`rounded-2xl border-2 p-4 text-left relative ${ciclo === 'anual' ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700'}`} data-ciclo-mae="anual">
               {e.economiaAnual ? <span className="absolute -top-2 right-3 rounded-full bg-emerald-600 text-white text-[11px] font-semibold px-2 py-0.5" data-economia-mae>economize {e.economiaAnual}%</span> : null}
@@ -163,7 +165,8 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
             {!a?.trialUsado && e.trialDias > 0 && <p className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> <b>{e.trialDias} dias grátis</b> — a 1ª cobrança só vem no fim do teste (cancele antes e não paga nada).</p>}
             {pixMensal ? <p className="flex items-center gap-2" data-aviso-pix-auto><Repeat className="w-4 h-4" /> Pix Automático, na página segura do Asaas: pague o 1º Pix e autorize no app do seu banco — as próximas mensalidades são debitadas sozinhas. Cancele quando quiser.</p> :
             <p className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> {ciclo === 'anual' && parcelas === 1 ? 'Pix ou cartão de crédito' : 'Cartão de crédito'}, na página segura do Asaas{e.trialDias > 0 ? '. Para validar o cartão fazemos uma reserva de R$ 5,00 que é liberada na hora.' : '. A 1ª cobrança é feita na hora; cancele quando quiser, sem novas cobranças.'}</p>}
-            {!standalone && <p className="text-xs text-gray-500">O Método Mãe é cobrado à parte e soma à sua assinatura do SOA (mensal ou anual, como já está). Vale enquanto o SOA estiver ativo.</p>}
+            {!standalone && combo && <p className="text-xs text-gray-500" data-aviso-pacote>Pacote SOA + Método Mãe numa cobrança só: o SOA completo e o Método Mãe juntos. Se você tem uma assinatura do SOA em andamento (o teste, por exemplo), ela é encerrada quando o pacote é pago — nada é cobrado em dobro.</p>}
+            {!standalone && !combo && <p className="text-xs text-gray-500">O Método Mãe é cobrado à parte e soma à sua assinatura do SOA (mensal ou anual, como já está). Vale enquanto o SOA estiver ativo.</p>}
           </div>
           <button onClick={() => void assinar()} disabled={indo} className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-3 font-semibold disabled:opacity-50" data-assinar-mae>
             {indo ? <Loader2 className="w-5 h-5 animate-spin" /> : <CreditCard className="w-5 h-5" />}

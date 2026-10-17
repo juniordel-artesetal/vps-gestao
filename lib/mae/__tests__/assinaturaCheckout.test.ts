@@ -13,19 +13,21 @@ vi.mock('@/lib/pagamento/asaas/client', () => ({
 vi.mock('@/lib/mae/assinatura/emails', () => ({ emailInicioTesteMae: vi.fn(), emailAtrasoMae: vi.fn(), emailCanceladaMae: vi.fn(async () => true) }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    $queryRaw: vi.fn(async (q: TemplateStringsArray) => (q.join('?').includes('to_jsonb(w)') ? [{ j: linhaWs }] : linhaAssinatura ? [linhaAssinatura] : [])),
+    // a conta paga o SOA? (decide pacote × MAE à parte — 16/10/2026)
+    $queryRaw: vi.fn(async (q: TemplateStringsArray) => { const t = q.join('?'); if (t.includes('to_jsonb(w)')) return [{ j: linhaWs }]; if (t.includes('SELECT "assinaturaStatus", "liberacaoManual"') || t.includes('SELECT "assinaturaStatus", "assinaturaOrigem", "liberacaoManual"')) return [{ assinaturaStatus: soaPaga ? 'ATIVA' : 'TRIAL', assinaturaOrigem: 'asaas', liberacaoManual: false }]; return linhaAssinatura ? [linhaAssinatura] : [] }),
     $executeRaw: vi.fn(async () => 1),
   },
 }))
 vi.mock('@/lib/assinatura/validacaoCartao', () => ({ validarCartaoDoCheckout: vi.fn() }))
 // lançamento 16/10: o SOA da conta está ativo? (inativo → assina SÓ o Método Mãe)
 let soaAtivo = true
+let soaPaga = true
 vi.mock('@/lib/assinatura', () => ({ temAcesso: vi.fn(async () => soaAtivo) }))
 
 const ENV = { MAE_LANCAMENTO_EM: '2026-10-01T00:00:00Z', MAE_VENDA_ATIVO: 'on', MAE_ADDON_MENSAL: '39.90', MAE_ADDON_ANUAL: '383', MAE_STANDALONE_MENSAL: '59.90', MAE_STANDALONE_ANUAL: '503' }
 
 describe('criarCheckoutMae', () => {
-  beforeEach(() => { soaAtivo = true; chamadas.length = 0; linhaWs = {}; linhaAssinatura = null; Object.assign(process.env, ENV); respostaAsaas = () => ({ ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } }) })
+  beforeEach(() => { soaAtivo = true; soaPaga = true; chamadas.length = 0; linhaWs = {}; linhaAssinatura = null; Object.assign(process.env, ENV); respostaAsaas = () => ({ ok: true, dados: { id: 'chk_1', link: 'https://asaas/checkout/chk_1' } }) })
   it('add-on anual em 12× (pente-fino 16/10): compra PARCELADA de verdade (DETACHED+INSTALLMENT, installment.maxInstallmentCount), total com juros, sem assinatura recorrente', async () => {
     const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
     const { calcularParcelamentoAnual } = await import('@/lib/assinatura/planos')
@@ -100,6 +102,7 @@ describe('criarCheckoutMae', () => {
   })
   it('PACOTE SOA + MAE (16/10): um item só de R$ 89,80/mês (recorrente) e R$ 753 à vista; o pagamento ativa o SOA e o MAE', async () => {
     const { criarCheckoutCombo, aplicarPagamentoMae } = await import('@/lib/mae/assinatura/servidor')
+    soaPaga = false
     const r = await criarCheckoutCombo({ workspaceId: 'ws8', ciclo: 'mensal', baseUrl: 'https://x' })
     expect(r.ok).toBe(true)
     const c = chamadas.find(x => x.caminho === '/checkouts')!
@@ -118,6 +121,13 @@ describe('criarCheckoutMae', () => {
     const sqls = (prisma.$executeRaw as unknown as { mock: { calls: [TemplateStringsArray][] } }).mock.calls.map(x => x[0].join('?'))
     expect(sqls.some(s => s.includes('"assinaturaStatus" = \'ATIVA\'') && s.includes('"assinaturaOrigem" = \'asaas\''))).toBe(true)
     expect(sqls.some(s => s.includes('"moduloMae" = true'))).toBe(true)
+  })
+  it('SOA em TESTE (não pago) pela tela do MAE: o pacote de R$ 89,80 — nunca o MAE de R$ 39,90 sem o SOA pago', async () => {
+    soaPaga = false
+    const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
+    await criarCheckoutMae({ workspaceId: 'ws10', ciclo: 'mensal', baseUrl: 'https://x' })
+    const it0 = (chamadas.find(x => x.caminho === '/checkouts')!.corpo!.items as { value: number; name: string }[])[0]
+    expect(it0.name).toBe('SOA + Método Mãe · mensal'); expect(it0.value).toBeCloseTo(89.8, 2)
   })
   it('quem já testou começa pagando hoje (sem 2º trial)', async () => {
     linhaAssinatura = { status: 'CANCELADA', trialUsado: true, valor: 0, ciclo: 'mensal', parcelas: 1, plano: 'addon' }

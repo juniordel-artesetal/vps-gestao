@@ -11,6 +11,9 @@ import { estadoMaeDaConta, assinaturaMaeDaConta, criarCheckoutMae, planoDeVenda 
 import { addonsDaConta } from '@/lib/mae/servidor/addons'
 import { janelaPopupMae } from '@/lib/mae/assinatura/lancamento'
 import { pixAutoLigado } from '@/lib/pagamento/asaas/linkPixAuto'
+import { contaJaPagaSoa } from '@/lib/mae/assinatura/servidor'
+import { precoCombo } from '@/lib/mae/assinatura/combo'
+import { calcularParcelamentoAnual } from '@/lib/assinatura/planos'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,11 +27,15 @@ export async function GET() {
     const plano = await planoDeVenda(ws, estado)
     const soaInativo = plano === 'standalone' && estado.plano !== 'standalone'
     const p = precosMae()
+    // quem tem o SOA mas ainda NÃO o paga (teste, atraso…) compra o PACOTE numa cobrança só: a tela mostra o preço dele
+    const combo = !!p && plano === 'addon' && !(await contaJaPagaSoa(ws))
+    const pc = combo && p ? precoCombo(p) : null
     return NextResponse.json({
       venda: vendaMaeAtiva(), plano, trialDias: TRIAL_DIAS_MAE, pixAuto: pixAutoLigado(),
-      precos: p ? p[plano] : null,
-      parcelamentoAnual: p ? tabelaAnualMae(p, plano) : [],
-      economiaAnual: p ? economiaAnual(p, plano) : null,
+      combo,
+      precos: pc ?? (p ? p[plano] : null),
+      parcelamentoAnual: pc ? Array.from({ length: 12 }, (_, k) => calcularParcelamentoAnual(k + 1, pc.anual)) : p ? tabelaAnualMae(p, plano) : [],
+      economiaAnual: pc ? Math.round((1 - pc.anual / (12 * pc.mensal)) * 100) : p ? economiaAnual(p, plano) : null,
       assinatura: assinatura ? { status: assinatura.status, ciclo: assinatura.ciclo, parcelas: assinatura.parcelas, valor: assinatura.valor, trialAte: assinatura.trialAte, proximoVencimento: assinatura.proximoVencimento, trialUsado: assinatura.trialUsado, checkoutAberto: !!assinatura.checkoutLink } : null,
       acesso: { liberado: addons.criacao.ativo, origem: addons.criacao.origem, ate: acessoMae(estado, hojeSP()) === 'asaas' ? estado.ate : null },
       admin: session.user.role === 'ADMIN', soaInativo,

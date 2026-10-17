@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { criarCheckoutMae, criarCheckoutCombo, contaJaPagaSoa, planoDeVenda } from '@/lib/mae/assinatura/servidor'
+import { criarCheckoutMae, criarCheckoutCombo, contaPodeEntrarNoPacote, planoDeVenda } from '@/lib/mae/assinatura/servidor'
 import { criarCheckoutMigracao } from '@/lib/assinatura/migracaoAnual'
 
 export const dynamic = 'force-dynamic'
@@ -45,7 +45,9 @@ export async function GET(req: NextRequest) {
     }
     // SOA + MAE para quem ainda NÃO paga o SOA = o PACOTE numa cobrança única (R$ 89,80/mês ou R$ 753/ano), direto —
     // inclusive o anual em N× (16/10/2026, correção do Júnior). Quem já paga o SOA segue abaixo: o MAE à parte (R$ 39,90).
-    if (o === 'soa-mae' && !(await contaJaPagaSoa(ws))) {
+    // o PREÇO clicado é o COBRADO: SOA + MAE (R$ 89,80) = o pacote, inclusive para quem já assina o SOA pelo Asaas (a
+    // assinatura antiga do SOA é encerrada quando o pacote é pago). Fora: SOA da Hotmart ou liberação manual → MAE à parte.
+    if (o === 'soa-mae' && await contaPodeEntrarNoPacote(ws)) {
       const r = await criarCheckoutCombo({ workspaceId: ws, ciclo, parcelas: ciclo === 'anual' ? parcelas : 1, baseUrl: url.origin, metodo })
       return ir(r.ok ? r.link : tela)
     }
