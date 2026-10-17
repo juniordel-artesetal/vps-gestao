@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import PixAutomaticoBox from '@/components/PixAutomaticoBox'
 import FaleConosco from '@/components/FaleConosco'
+import { PIX_AUTOMATICO_LIBERADO } from '@/lib/pagamento/pixAutomaticoLiberado'
 
 interface Parcelamento { parcelas: number; valorParcela: number; total: number }
 interface Plano {
@@ -396,7 +397,7 @@ export default function AssinaturaPage() {
             </div>
             </>) : (<>
             <h2 className="text-base font-semibold text-gray-900 mb-3">2. Como prefere pagar?</h2>
-            <div className="grid sm:grid-cols-3 gap-3 mb-4">
+            <div className={`grid gap-3 mb-4 ${PIX_AUTOMATICO_LIBERADO ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
               <button onClick={() => setMetodo('cartao')}
                 className={`text-left rounded-2xl border-2 p-4 transition ${
                   metodo === 'cartao' ? 'border-orange-500 bg-orange-50/50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
@@ -415,7 +416,7 @@ export default function AssinaturaPage() {
                 </div>
                 <p className="text-xs text-gray-600">Você recebe a cobrança e paga com um toque.</p>
               </button>
-              <button onClick={() => { setMetodo('pixauto'); setParcelas(1) }}
+              {PIX_AUTOMATICO_LIBERADO && <button onClick={() => { setMetodo('pixauto'); setParcelas(1) }}
                 className={`text-left rounded-2xl border-2 p-4 transition ${
                   metodo === 'pixauto' ? 'border-orange-500 bg-orange-50/50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
                 <div className="flex items-center gap-2 mb-1">
@@ -423,7 +424,7 @@ export default function AssinaturaPage() {
                   <span className="font-semibold text-gray-900">Pix Automático</span>
                 </div>
                 <p className="text-xs text-gray-600">Autoriza uma vez, as próximas caem sozinhas — sem cartão.</p>
-              </button>
+              </button>}
             </div>
             </>)}
 

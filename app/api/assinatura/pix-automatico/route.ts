@@ -15,6 +15,7 @@ import { criarLinkPixAuto, pixAutoLigado } from '@/lib/pagamento/asaas/linkPixAu
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { getCredenciais } from '@/lib/pagamento/asaas/config'
 import { URL_SOA } from '@/lib/baseUrl'
+import { PIX_AUTOMATICO_LIBERADO } from '@/lib/pagamento/pixAutomaticoLiberado'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,7 @@ export async function POST() {
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
   const workspaceId = session.user.workspaceId
   if (session.user.role !== 'ADMIN') return NextResponse.json({ error: 'Só a administradora da conta pode assinar.' }, { status: 403 })
-  if (!pixAutoLigado()) return NextResponse.json({ error: 'O Pix Automático está indisponível no momento. Use o cartão ou o Pix mês a mês.' }, { status: 400 })
+  if (!PIX_AUTOMATICO_LIBERADO || !pixAutoLigado()) return NextResponse.json({ error: 'O Pix Automático chega em breve. Por enquanto, use o Pix mês a mês ou o cartão.' }, { status: 400 })
 
   // Teste grátis = SÓ CARTÃO. Pix Automático fica para quem já passou do teste.
   const [ws] = await prisma.$queryRaw`

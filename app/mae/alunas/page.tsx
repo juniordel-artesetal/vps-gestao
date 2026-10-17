@@ -64,7 +64,7 @@ export default async function PlanoAlunas({ searchParams }: { searchParams: Prom
                 <p className="text-sm text-[#7a6a5f]">por mês · cancele quando quiser</p>
                 <div className="mt-4 flex flex-1 flex-col justify-end gap-2">
                   <Cta href={pagar('mensal')} botao="alunas-mensal" className="block rounded-2xl bg-[#f97316] px-5 py-3 text-center font-bold text-white hover:bg-[#ea580c]">Assinar mensal (cartão) →</Cta>
-                  <Cta href={pagar('mensal', 1, true)} botao="alunas-mensal-pix" className="block rounded-2xl border-2 border-[#eadfd6] px-5 py-3 text-center font-bold hover:border-[#f97316]">Mensal no Pix Automático →</Cta>
+                  <Cta href={pagar('mensal', 1, true)} botao="alunas-mensal-pix" className="block rounded-2xl border-2 border-[#eadfd6] px-5 py-3 text-center font-bold hover:border-[#f97316]">Mensal no Pix (um por mês) →</Cta>
                 </div>
               </div>
               <div className="relative flex flex-col rounded-3xl bg-[#fffaf5] p-5 ring-4 ring-[#f97316]">

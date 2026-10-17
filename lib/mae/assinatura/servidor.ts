@@ -150,13 +150,13 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
   const cobr = cobrancaMae(precos, plano, p.ciclo, p.parcelas ?? 1)
   // MENSAL NO PIX AUTOMÁTICO (16/10/2026): link de pagamento do Asaas (Pix recorrente — ela autoriza no app do banco)
   const pixAuto = p.ciclo === 'mensal' && p.metodo === 'pix'
-  if (pixAuto && !pixAutoLigado()) return { ok: false, erro: 'O Pix Automático está indisponível no momento. Use o cartão.', status: 400 }
+  if (pixAuto && !pixAutoLigado()) return { ok: false, erro: 'O Pix mensal está indisponível no momento. Use o cartão.', status: 400 }
   if (atual?.status === 'AGUARDANDO_PAGAMENTO' && atual.checkoutLink && atual.ciclo === p.ciclo && atual.parcelas === cobr.parcelas && atual.plano === plano
       && ehLinkDePagamento(atual.checkoutLink) === pixAuto && Math.abs(atual.valor - cobr.total) < 0.01)
     return { ok: true, link: atual.checkoutLink, reaproveitado: true }
   if (pixAuto) {
     const l = await criarLinkPixAuto({
-      nome: nomeItem(plano, 'mensal'), descricao: `${descItem(plano, 'mensal', cobr)} Pix Automático: autorize uma vez no app do banco.`.slice(0, 150),
+      nome: nomeItem(plano, 'mensal'), descricao: `${descItem(plano, 'mensal', cobr)} Pix mensal: todo mês chega um Pix novo por e-mail.`.slice(0, 150),
       valor: cobr.total, externalReference: refAssinaturaMae(p.workspaceId), sucesso: `${p.baseUrl}${retorno}?pago=1`,
     })
     if (!l.ok) { console.error(`[MAE ASSINATURA] link Pix Automático falhou ws=${p.workspaceId}: ${l.erro}`); return { ok: false, erro: l.erro, status: 502 } }
@@ -267,7 +267,7 @@ export async function criarCheckoutCombo(p: { workspaceId: string; ciclo: CicloM
       && ehLinkDePagamento(atual.checkoutLink) === pixAuto && Math.abs(atual.valor - cobr.total) < 0.01)
     return { ok: true, link: atual.checkoutLink, reaproveitado: true }
   if (pixAuto) {
-    const l = await criarLinkPixAuto({ nome: nomeDoItemCombo('mensal'), descricao: `${descricaoDoItemCombo('mensal', cobr)} Pix Automático.`.slice(0, 150),
+    const l = await criarLinkPixAuto({ nome: nomeDoItemCombo('mensal'), descricao: `${descricaoDoItemCombo('mensal', cobr)} Pix mensal (um Pix por mês).`.slice(0, 150),
       valor: cobr.total, externalReference: refAssinaturaMae(p.workspaceId), sucesso: `${p.baseUrl}/mae/assinatura?pago=1` })
     if (!l.ok) return { ok: false, erro: l.erro, status: 502 }
     if (atual?.status === 'AGUARDANDO_PAGAMENTO' && ehLinkDePagamento(atual.checkoutLink)) await apagarLinkPixAuto(atual.checkoutId)

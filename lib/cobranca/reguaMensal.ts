@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { URL_SOA } from '@/lib/baseUrl'
 import { pixAutoLigado } from '@/lib/pagamento/asaas/linkPixAuto'
+import { PIX_AUTOMATICO_LIBERADO } from '@/lib/pagamento/pixAutomaticoLiberado'
 
 const REMETENTE = 'Equipe SOA <suporte@vps-gestao.com.br>'
 const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }).replace(/ /g, ' ')
@@ -309,7 +310,7 @@ export async function rodarReguaMensal(o: { seco?: boolean; agora?: Date } = {})
     const chave = `${dona.workspaceId}|${dona.userId ?? ''}`
     const g = grupos.get(chave) ?? { dona, itens: [] }
     g.itens.push({ produto: dona.produto, etapa, valor: Number(c.value), vencimento: c.dueDate, diasParaVencer: dias, noCartao: c.billingType === 'CREDIT_CARD', bloqueado: dona.bloqueado, paymentId: c.id,
-      convitePixAuto: etapa === 'LEMBRETE' && pixAutoLigado() && deveConvidarPixAuto(dona.produto, dias, c.billingType, c.paymentLink) })
+      convitePixAuto: etapa === 'LEMBRETE' && PIX_AUTOMATICO_LIBERADO && pixAutoLigado() && deveConvidarPixAuto(dona.produto, dias, c.billingType, c.paymentLink) })
     if (g.itens[g.itens.length - 1].convitePixAuto) r.convitesPixAuto++
     grupos.set(chave, g)
   }

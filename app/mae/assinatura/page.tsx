@@ -156,14 +156,14 @@ Nenhuma nova cobrança será feita e você continua usando até ${fim}. Suas bas
                 <span className="text-xs text-gray-500">cobrança automática todo mês</span>
               </button>
               <button onClick={() => setMetodo('pix')} className={`rounded-xl border-2 px-3 py-2 text-left text-sm ${metodo === 'pix' ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-950/20' : 'border-gray-200 dark:border-gray-700'}`} data-metodo-mae-opcao="pix">
-                <span className="flex items-center gap-2 font-semibold"><Repeat className="w-4 h-4" /> Pix Automático</span>
-                <span className="text-xs text-gray-500">sem cartão: autoriza uma vez no banco</span>
+                <span className="flex items-center gap-2 font-semibold"><Repeat className="w-4 h-4" /> Pix mensal</span>
+                <span className="text-xs text-gray-500">sem cartão: um Pix por mês, enviado por e-mail</span>
               </button>
             </div>
           )}
           <div className="rounded-xl bg-gray-50 dark:bg-gray-800/50 px-4 py-3 text-sm text-gray-600 dark:text-gray-300 space-y-1">
             {!a?.trialUsado && e.trialDias > 0 && <p className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-600" /> <b>{e.trialDias} dias grátis</b> — a 1ª cobrança só vem no fim do teste (cancele antes e não paga nada).</p>}
-            {pixMensal ? <p className="flex items-center gap-2" data-aviso-pix-auto><Repeat className="w-4 h-4" /> Pix Automático, na página segura do Asaas: pague o 1º Pix e autorize no app do seu banco — as próximas mensalidades são debitadas sozinhas. Cancele quando quiser.</p> :
+            {pixMensal ? <p className="flex items-center gap-2" data-aviso-pix-auto><Repeat className="w-4 h-4" /> Pix mensal, na página segura do Asaas: pague o 1º Pix agora; nos próximos meses o Pix de cada mensalidade chega por e-mail (com lembrete antes do vencimento). Cancele quando quiser.</p> :
             <p className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> {ciclo === 'anual' && parcelas === 1 ? 'Pix ou cartão de crédito' : 'Cartão de crédito'}, na página segura do Asaas{e.trialDias > 0 ? '. Para validar o cartão fazemos uma reserva de R$ 5,00 que é liberada na hora.' : '. A 1ª cobrança é feita na hora; cancele quando quiser, sem novas cobranças.'}</p>}
             {!standalone && combo && <p className="text-xs text-gray-500" data-aviso-pacote>Pacote SOA + Método Mãe numa cobrança só: o SOA completo e o Método Mãe juntos. Se você tem uma assinatura do SOA em andamento (o teste, por exemplo), ela é encerrada quando o pacote é pago — nada é cobrado em dobro.</p>}
             {!standalone && !combo && <p className="text-xs text-gray-500">O Método Mãe é cobrado à parte e soma à sua assinatura do SOA (mensal ou anual, como já está). Vale enquanto o SOA estiver ativo.</p>}
