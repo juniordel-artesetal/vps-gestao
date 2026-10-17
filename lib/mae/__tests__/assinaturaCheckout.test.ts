@@ -76,6 +76,19 @@ describe('criarCheckoutMae', () => {
     try { expect((await criarCheckoutMae({ workspaceId: 'ws4', ciclo: 'mensal', baseUrl: 'https://x', metodo: 'pix' })).ok).toBe(false) }
     finally { delete process.env.PIX_AUTO }
   })
+  it('Plano Alunas (16/10): R$ 49,90 mensal e R$ 419 à vista, com o nome do plano no Asaas; link vencido → recusa', async () => {
+    const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
+    await criarCheckoutMae({ workspaceId: 'ws5', ciclo: 'mensal', baseUrl: 'https://x', oferta: 'alunas' })
+    const it0 = (chamadas[0].corpo!.items as { value: number; name: string; description: string }[])[0]
+    expect(it0.value).toBe(49.9); expect(it0.name).toMatch(/Alunas/); expect(it0.description).toMatch(/Plano Alunas/)
+    expect((chamadas[0].corpo!.callback as { successUrl: string }).successUrl).toContain('/mae/alunas?pago=1')
+    chamadas.length = 0
+    await criarCheckoutMae({ workspaceId: 'ws5', ciclo: 'anual', parcelas: 1, baseUrl: 'https://x', oferta: 'alunas' })
+    expect((chamadas[0].corpo!.items as { value: number }[])[0].value).toBe(419)
+    process.env.MAE_ALUNAS_ATE = '2026-01-01T00:00:00Z'
+    try { const r = await criarCheckoutMae({ workspaceId: 'ws5', ciclo: 'mensal', baseUrl: 'https://x', oferta: 'alunas' }); expect(r.ok).toBe(false) }
+    finally { delete process.env.MAE_ALUNAS_ATE }
+  })
   it('quem já testou começa pagando hoje (sem 2º trial)', async () => {
     linhaAssinatura = { status: 'CANCELADA', trialUsado: true, valor: 0, ciclo: 'mensal', parcelas: 1, plano: 'addon' }
     const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')

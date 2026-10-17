@@ -12,6 +12,7 @@
 // (trial/ativa/inadimplente) não abre outro checkout.
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
+import { OFERTA_ALUNAS, alunasAberta, precosAlunas, nomeDoItemAlunas, descricaoDoItemAlunas, marcaCheckoutAlunas, MARCA_COMPRA_ALUNAS, DIA_MARCA_ALUNAS, type OfertaMae } from './alunas'
 import { criarLinkPixAuto, apagarLinkPixAuto, ehLinkDePagamento, pixAutoLigado } from '@/lib/pagamento/asaas/linkPixAuto'
 import { temAcesso } from '@/lib/assinatura'
 import { validarCartaoDoCheckout } from '@/lib/assinatura/validacaoCartao'
@@ -118,9 +119,16 @@ export type ResultadoCheckoutMae = { ok: true; link: string; reaproveitado?: boo
  * Abre o checkout do Método Mãe. Sem cobrança dupla: assinatura viva → não abre outro (inadimplente → leva à
  * fatura em aberto). Trial de 7 dias só na PRIMEIRA vez (quem já testou começa pagando).
  */
-export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae; parcelas?: number; baseUrl: string; metodo?: 'cartao' | 'pix' }): Promise<ResultadoCheckoutMae> {
-  const precos = precosMae()
+export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae; parcelas?: number; baseUrl: string; metodo?: 'cartao' | 'pix'; oferta?: OfertaMae }): Promise<ResultadoCheckoutMae> {
+  // Plano Alunas VPS (16/10/2026): preço próprio, com validade, uma compra por conta (ver ./alunas.ts)
+  const alunas = p.oferta === OFERTA_ALUNAS
+  const precos = alunas ? precosAlunas() : precosMae()
   if (!vendaMaeAtiva() || !precos) return { ok: false, erro: 'O Método Mãe ainda não está à venda.', status: 400 }
+  if (alunas && !alunasAberta()) return { ok: false, erro: 'O link do Plano Alunas venceu em 31/10/2026.', status: 400 }
+  if (alunas && await jaComprouAlunas(p.workspaceId)) return { ok: false, erro: 'Esta conta já comprou pelo Plano Alunas — o link vale uma compra por conta.', status: 400 }
+  const nomeItem = (pl: PlanoMaeVenda, c: CicloMae) => (alunas ? nomeDoItemAlunas(c) : nomeDoItemMae(pl, c))
+  const descItem = (pl: PlanoMaeVenda, c: CicloMae, x: { parcelas: number; valorParcela: number; total: number }) => (alunas ? descricaoDoItemAlunas(c, x) : descricaoDoItemMae(pl, c, x))
+  const retorno = alunas ? '/mae/alunas' : '/mae/assinatura'
   const estado = await estadoMaeDaConta(p.workspaceId)
   if (estado.moduloMae && estado.origem === 'cortesia') return { ok: false, erro: 'Esta conta já tem o Método Mãe liberado.', status: 400 }
   const plano: PlanoMaeVenda = await planoDeVenda(p.workspaceId, estado)
@@ -136,17 +144,18 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
   const pixAuto = p.ciclo === 'mensal' && p.metodo === 'pix'
   if (pixAuto && !pixAutoLigado()) return { ok: false, erro: 'O Pix Automático está indisponível no momento. Use o cartão.', status: 400 }
   if (atual?.status === 'AGUARDANDO_PAGAMENTO' && atual.checkoutLink && atual.ciclo === p.ciclo && atual.parcelas === cobr.parcelas && atual.plano === plano
-      && ehLinkDePagamento(atual.checkoutLink) === pixAuto)
+      && ehLinkDePagamento(atual.checkoutLink) === pixAuto && Math.abs(atual.valor - cobr.total) < 0.01)
     return { ok: true, link: atual.checkoutLink, reaproveitado: true }
   if (pixAuto) {
     const l = await criarLinkPixAuto({
-      nome: nomeDoItemMae(plano, 'mensal'), descricao: `${descricaoDoItemMae(plano, 'mensal', cobr)} Pix Automático: autorize uma vez no app do banco.`,
-      valor: cobr.total, externalReference: refAssinaturaMae(p.workspaceId), sucesso: `${p.baseUrl}/mae/assinatura?pago=1`,
+      nome: nomeItem(plano, 'mensal'), descricao: `${descItem(plano, 'mensal', cobr)} Pix Automático: autorize uma vez no app do banco.`.slice(0, 150),
+      valor: cobr.total, externalReference: refAssinaturaMae(p.workspaceId), sucesso: `${p.baseUrl}${retorno}?pago=1`,
     })
     if (!l.ok) { console.error(`[MAE ASSINATURA] link Pix Automático falhou ws=${p.workspaceId}: ${l.erro}`); return { ok: false, erro: l.erro, status: 502 } }
     // o link anterior (se era um link de Pix) não pode mais ser pago
     if (atual?.status === 'AGUARDANDO_PAGAMENTO' && ehLinkDePagamento(atual.checkoutLink)) await apagarLinkPixAuto(atual.checkoutId)
     await gravarAguardando(p.workspaceId, plano, 'mensal', cobr.parcelas, cobr.total, l.id, l.url)
+    if (alunas) await marcarCheckoutAlunas(p.workspaceId, l.id)
     console.log(`[MAE ASSINATURA] link Pix Automático ws=${p.workspaceId} ${plano}/mensal total=${cobr.total}`)
     return { ok: true, link: l.url }
   }
@@ -162,7 +171,7 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
   //    Asaas cobra o TOTAL de uma vez (caso real 8GF7). O anual PARCELADO vai como compra parcelada de verdade
   //    (DETACHED + INSTALLMENT, `installment.maxInstallmentCount` = as parcelas escolhidas na nossa tela) — o item já é o
   //    total com juros da tabela Price; não renova sozinho (no fim do ano, renovar). Mensal e anual 1× seguem recorrentes.
-  const nome = nomeDoItemMae(plano, p.ciclo)
+  const nome = nomeItem(plano, p.ciclo)
   const parcelado = p.ciclo === 'anual' && cobr.parcelas > 1
   // Decisão do Júnior (16/10): ANUAL À VISTA = Pix ou cartão 1× (compra avulsa — o Asaas não aceita Pix em recorrente;
   // não renova sozinho); ANUAL EM N× = cartão com juros; MENSAL = só cartão (recorrente). Nunca boleto.
@@ -170,9 +179,9 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
   const corpo: Record<string, unknown> = {
     billingTypes: anual && !parcelado ? ['CREDIT_CARD', 'PIX'] : ['CREDIT_CARD'],
     chargeTypes: parcelado ? ['DETACHED', 'INSTALLMENT'] : anual ? ['DETACHED'] : ['RECURRENT'], minutesToExpire: 1440,
-    callback: { successUrl: `${p.baseUrl}/mae/assinatura?pago=1`, cancelUrl: `${p.baseUrl}/mae/assinatura`, expiredUrl: `${p.baseUrl}/mae/assinatura` },
+    callback: { successUrl: `${p.baseUrl}${retorno}?pago=1`, cancelUrl: `${p.baseUrl}${retorno}`, expiredUrl: `${p.baseUrl}${retorno}` },
     // o item JÁ é o total com juros (tabela Price) — NÃO ligar "repassar juros ao cliente" no Asaas
-    items: [{ name: nome, description: descricaoDoItemMae(plano, p.ciclo, cobr), quantity: 1, value: cobr.total }],
+    items: [{ name: nome, description: descItem(plano, p.ciclo, cobr), quantity: 1, value: cobr.total }],
     externalReference: refAssinaturaMae(p.workspaceId),
     ...(parcelado ? { installment: { maxInstallmentCount: cobr.parcelas } } : anual ? {} : { subscription: { cycle: 'MONTHLY', nextDueDate: primeira } }),
   }
@@ -182,8 +191,32 @@ export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae
     return { ok: false, erro: r.erro || 'Não consegui abrir a página de pagamento.', status: 502 }
   }
   await gravarAguardando(p.workspaceId, plano, p.ciclo, cobr.parcelas, cobr.total, r.dados.id, r.dados.link)
+  if (alunas) await marcarCheckoutAlunas(p.workspaceId, r.dados.id)
   console.log(`[MAE ASSINATURA] checkout ws=${p.workspaceId} ${plano}/${p.ciclo} ${cobr.parcelas}x total=${cobr.total} trial=${comTrial}`)
   return { ok: true, link: r.dados.link }
+}
+
+// ── Plano Alunas: o checkout aberto pelo link e a compra paga (uma por conta) ─────────────────────────────────────
+async function marcarCheckoutAlunas(ws: string, checkoutId: string) {
+  await prisma.$executeRaw`
+    INSERT INTO "AssinaturaAviso" ("id","workspaceId","tipo","dia","createdAt","enviadoEm")
+    VALUES (${gid()}, ${ws}, ${marcaCheckoutAlunas(checkoutId)}, ${DIA_MARCA_ALUNAS}::date, NOW(), NOW())
+    ON CONFLICT ("workspaceId","tipo","dia") DO NOTHING`.catch(e => console.error('[MAE ALUNAS] marca do checkout', (e as Error).message))
+}
+export async function jaComprouAlunas(ws: string): Promise<boolean> {
+  const [x] = await prisma.$queryRaw<{ ok: number }[]>`SELECT 1 AS ok FROM "AssinaturaAviso" WHERE "workspaceId" = ${ws} AND "tipo" = ${MARCA_COMPRA_ALUNAS} LIMIT 1`.catch(() => [])
+  return !!x
+}
+/** Pagamento confirmado: se a compra veio do link do Plano Alunas, a conta fica marcada (o link não vale de novo). */
+async function marcarCompraAlunasSeFor(ws: string, checkoutId: string | null) {
+  if (!checkoutId) return
+  const [x] = await prisma.$queryRaw<{ ok: number }[]>`SELECT 1 AS ok FROM "AssinaturaAviso" WHERE "workspaceId" = ${ws} AND "tipo" = ${marcaCheckoutAlunas(checkoutId)} LIMIT 1`.catch(() => [])
+  if (!x) return
+  await prisma.$executeRaw`
+    INSERT INTO "AssinaturaAviso" ("id","workspaceId","tipo","dia","createdAt","enviadoEm")
+    VALUES (${gid()}, ${ws}, ${MARCA_COMPRA_ALUNAS}, ${DIA_MARCA_ALUNAS}::date, NOW(), NOW())
+    ON CONFLICT ("workspaceId","tipo","dia") DO NOTHING`.catch(() => {})
+  console.log(`[MAE ALUNAS] compra pelo Plano Alunas ws=${ws}`)
 }
 
 /** Grava (ou troca) a tentativa de compra aguardando o pagamento — checkout hospedado ou link do Pix Automático. */
@@ -286,6 +319,7 @@ export async function aplicarPagamentoMae(evento: string, pag: PagamentoAsaas): 
     const prox = proximoDoPagamento(venc, a.ciclo === 'anual' ? 'anual' : 'mensal', pag.installmentNumber)
     await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'ATIVA', "proximoVencimento" = GREATEST(COALESCE("proximoVencimento", ${prox}::date), ${prox}::date), "updatedAt" = NOW() WHERE "id" = ${a.id} AND "status" <> 'CANCELADA'`
     if (a.status !== 'CANCELADA') await darAcesso(a.workspaceId, a.plano, a.ciclo, somarDias(prox, CARENCIA_DIAS_MAE))
+    await marcarCompraAlunasSeFor(a.workspaceId, (await assinaturaMaeDaConta(a.workspaceId))?.checkoutId ?? pag.checkoutSession ?? pag.paymentLink ?? null).catch(() => {})
     console.log(`[MAE ASSINATURA] pago ws=${a.workspaceId} → acesso até ${somarDias(prox, CARENCIA_DIAS_MAE)}`)
   } else if (evento === 'PAYMENT_OVERDUE') {
     await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'INADIMPLENTE', "updatedAt" = NOW() WHERE "id" = ${a.id} AND "status" IN ('TRIAL','ATIVA')`

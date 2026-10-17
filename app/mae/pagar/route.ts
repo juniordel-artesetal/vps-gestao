@@ -1,5 +1,5 @@
 // usesoa.com.br/mae/pagar — o PREÇO clicado na página de vendas vai DIRETO para a página de pagamento do Asaas.
-//   ?o=soa-mae | so-mae | anual-soa   ·   &ciclo=mensal|anual   ·   &parcelas=1..12 (anual)   ·   &metodo=pix (mensal no Pix Automático)
+//   ?o=soa-mae | so-mae | anual-soa | alunas (Plano Alunas VPS, 16/10/2026: preço próprio, até 31/10)   ·   &ciclo=mensal|anual   ·   &parcelas=1..12 (anual)   ·   &metodo=pix (mensal no Pix Automático)
 // Sem sessão: só-MAE → cadastro (e volta para cá depois); SOA + MAE e troca para o anual → login (e volta para cá).
 // Com sessão: abre o checkout certo (o mesmo das telas: sem cobrança dupla, link reaproveitado) e redireciona.
 // Qualquer coisa fora do esperado (venda ainda fechada, plano da conta diferente do clicado, assinatura já ativa)
@@ -20,15 +20,22 @@ export async function GET(req: NextRequest) {
   const metodo = ciclo === 'mensal' && url.searchParams.get('metodo') === 'pix' ? 'pix' : 'cartao'
   const aqui = `/mae/pagar?o=${encodeURIComponent(o ?? '')}&ciclo=${ciclo}&parcelas=${parcelas}${metodo === 'pix' ? '&metodo=pix' : ''}`
   const ir = (p: string) => NextResponse.redirect(p.startsWith('http') ? p : new URL(p, url.origin))
-  const tela = o === 'anual-soa' ? '/assinatura/migrar-anual' : `/mae/assinatura?ciclo=${ciclo}${ciclo === 'anual' && parcelas > 1 ? `&parcelas=${parcelas}` : ''}`
-  if (o !== 'soa-mae' && o !== 'so-mae' && o !== 'anual-soa') return ir('/mae#planos')
+  const alunas = o === 'alunas'
+  const tela = o === 'anual-soa' ? '/assinatura/migrar-anual' : alunas ? '/mae/alunas' : `/mae/assinatura?ciclo=${ciclo}${ciclo === 'anual' && parcelas > 1 ? `&parcelas=${parcelas}` : ''}`
+  if (o !== 'soa-mae' && o !== 'so-mae' && o !== 'anual-soa' && !alunas) return ir('/mae#planos')
 
   const session = await getServerSession(authOptions)
   const ws = session?.user.workspaceId
   // &conta=1 (links dos e-mails): a pessoa JÁ tem conta → entra (nunca o cadastro de conta nova)
   const temConta = url.searchParams.get('conta') === '1'
-  if (!ws) return ir(o === 'so-mae' && !temConta ? `/mae/cadastro?depois=${encodeURIComponent(aqui)}` : `/login?callbackUrl=${encodeURIComponent(aqui)}`)
+  // Plano Alunas sem sessão: a aluna nova cria a conta (a que já tem conta entra pelo "Entrar" do cadastro, que volta para cá)
+  if (!ws) return ir((o === 'so-mae' || alunas) && !temConta ? `/mae/cadastro?depois=${encodeURIComponent(aqui)}` : `/login?callbackUrl=${encodeURIComponent(aqui)}`)
   if (session.user.role !== 'ADMIN') return ir(tela)
+  if (alunas) {
+    // qualquer aluna (com ou sem o SOA): direto para o pagamento — inclusive o anual em N× (a página já mostrou as parcelas)
+    const r = await criarCheckoutMae({ workspaceId: ws, ciclo, parcelas: ciclo === 'anual' ? parcelas : 1, baseUrl: url.origin, metodo, oferta: 'alunas' })
+    return ir(r.ok ? r.link : `/mae/alunas?erro=${encodeURIComponent(r.erro)}`)
+  }
   try {
     if (o === 'anual-soa') {
       // pente-fino 16/10: a troca para o anual sai À VISTA (o parcelado do SOA fica para depois — o recorrente não parcela)

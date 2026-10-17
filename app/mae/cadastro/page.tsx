@@ -1,7 +1,7 @@
 'use client'
 // MÉTODO MÃE STANDALONE — cadastro de quem quer SÓ o MAE (sem o SOA). Cria a conta, entra e segue para a assinatura
 // (sem teste grátis — decisão de 15/10). Com a venda fechada, o servidor recusa e a tela mostra "em breve".
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -15,6 +15,9 @@ export default function CadastroMaePage() {
   const [f, setF] = useState({ nome: '', nomeNegocio: '', email: '', senha: '', confirmar: '' })
   const [erro, setErro] = useState<string | null>(null)
   const [indo, setIndo] = useState(false)
+  // "Já tem conta? Entrar" volta para a compra (ex.: o link do Plano Alunas) depois do login
+  const [loginHref, setLoginHref] = useState('/login')
+  useEffect(() => { const d = new URLSearchParams(window.location.search).get('depois') ?? ''; if (d.startsWith('/mae/pagar?')) setLoginHref(`/login?callbackUrl=${encodeURIComponent(d)}`) }, [])
   const campo = (k: keyof typeof f, rotulo: string, tipo = 'text', auto?: string) => (
     <label className="block text-sm text-gray-700">{rotulo}
       <input type={tipo} autoComplete={auto} value={f[k]} onChange={e => { setF(x => ({ ...x, [k]: e.target.value })); setErro(null) }} className={inp} data-cadastro-mae={k} required />
@@ -52,7 +55,7 @@ export default function CadastroMaePage() {
         <button disabled={indo} className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 font-semibold disabled:opacity-50" data-criar-conta-mae>
           {indo && <Loader2 className="w-4 h-4 animate-spin" />} Criar conta e continuar
         </button>
-        <p className="text-xs text-center text-gray-500">Já tem conta? <Link href="/login" className="text-orange-600 underline">Entrar</Link></p>
+        <p className="text-xs text-center text-gray-500">Já tem conta? <Link href={loginHref} className="text-orange-600 underline" data-cadastro-entrar>Entrar</Link></p>
       </form>
     </div>
   )
