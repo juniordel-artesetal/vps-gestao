@@ -11,6 +11,9 @@ import {
 } from 'lucide-react'
 import { CHANGELOG } from '@/lib/versao'
 import { pessoalBetaVisivel } from '@/lib/pessoal/beta'
+// o hub é a 1ª tela depois do login e não usa o AppShell (onde mora o pop-up): sem isto a assinante só via o convite
+// do Método Mãe ao abrir outra área (16/10/2026)
+import MaeLancamentoPopup from '@/components/MaeLancamentoPopup'
 
 interface Banner       { id:string; titulo:string|null; imagem:string; link:string|null; linkexterno:boolean; tempoExibicao:number }
 interface Noticia      { id:string; emoji:string; titulo:string; descricao:string|null; link:string|null; linkTexto:string }
@@ -136,6 +139,7 @@ export default function ModulosPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-4 md:p-6">
+      <MaeLancamentoPopup />
       <div className="max-w-6xl mx-auto space-y-5">
 
         {/* Header */}
