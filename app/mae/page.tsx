@@ -6,6 +6,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { precosMae, cobrancaMae } from '@/lib/mae/assinatura/precos'
+import { cobrancaCombo } from '@/lib/mae/assinatura/combo'
 import { precoMensalVigente, anualAvistaVigente } from '@/lib/assinatura/planos'
 import { inicioLancamentoMae } from '@/lib/mae/assinatura/lancamento'
 import { Cta, Calculadora, Contato } from './SiteMae'
@@ -61,6 +62,8 @@ export default function PaginaMae() {
   const planos = p && {
     soMensal: p.standalone.mensal, soAnual: p.standalone.anual, so12: cobrancaMae(p, 'standalone', 'anual', 12).valorParcela,
     addMensal: p.addon.mensal, addAnual: p.addon.anual, add12: cobrancaMae(p, 'addon', 'anual', 12).valorParcela,
+    // o PACOTE SOA + MAE numa cobrança única (16/10): 12× do anual do pacote
+    combo12: cobrancaCombo(p, 'anual', 12).valorParcela,
   }
   const liveAinda = liveAindaNoAr()
 
@@ -222,11 +225,11 @@ export default function PaginaMae() {
             <>
               <div className="mt-10 grid gap-5 lg:grid-cols-2">
                 <Plano destaque titulo="SOA + Método MAE" para="O sistema completo do ateliê (pedidos, produção, financeiro, precificação) + o Método MAE."
-                  mensal={r2(soaMensal + planos.addMensal)} anual={r2(soaAnual + planos.addAnual)} doze={planos.add12} rotulo12="ou o Método MAE em 12× de" o="soa-mae"
-                  composicao={`SOA ${brl(soaMensal)} + MAE ${brl(planos.addMensal)} por mês · no anual, SOA ${brl(soaAnual)} + MAE ${brl(planos.addAnual)}`}
+                  mensal={r2(soaMensal + planos.addMensal)} anual={r2(soaAnual + planos.addAnual)} doze={planos.combo12} o="soa-mae"
+                  composicao={`Numa cobrança só: SOA ${brl(soaMensal)} + MAE ${brl(planos.addMensal)} por mês · no anual, SOA ${brl(soaAnual)} + MAE ${brl(planos.addAnual)}`}
                   botoes={[
                     { href: '/mae/assinatura', botao: 'soa-mae-ja-assino', texto: 'Já assino o SOA: ativar o Método MAE', sub: `você paga só + ${brl(planos.addMensal)}/mês (ou ${brl(planos.addAnual)}/ano)`, principal: true },
-                    { href: '/register', botao: 'soa-mae-novo', texto: 'Ainda não tenho o SOA', sub: 'crie sua conta no SOA e ative o Método MAE dentro dele' },
+                    { href: '/mae/pagar?o=soa-mae&ciclo=mensal&parcelas=1', botao: 'soa-mae-novo', texto: 'Ainda não tenho o SOA', sub: `SOA + Método MAE por ${brl(r2(soaMensal + planos.addMensal))}/mês, numa cobrança só` },
                   ]} />
                 <Plano titulo="Só o Método MAE" para="Para quem quer só o módulo, sem o SOA. Os pedidos entram pela planilha da Shopee ou pelo cadastro manual."
                   mensal={planos.soMensal} anual={planos.soAnual} doze={planos.so12} o="so-mae"

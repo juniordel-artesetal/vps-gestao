@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { criarCheckoutMae, planoDeVenda } from '@/lib/mae/assinatura/servidor'
+import { criarCheckoutMae, criarCheckoutCombo, contaJaPagaSoa, planoDeVenda } from '@/lib/mae/assinatura/servidor'
 import { criarCheckoutMigracao } from '@/lib/assinatura/migracaoAnual'
 
 export const dynamic = 'force-dynamic'
@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
   // &conta=1 (links dos e-mails): a pessoa JÁ tem conta → entra (nunca o cadastro de conta nova)
   const temConta = url.searchParams.get('conta') === '1'
   // Plano Alunas sem sessão: a aluna nova cria a conta (a que já tem conta entra pelo "Entrar" do cadastro, que volta para cá)
-  if (!ws) return ir((o === 'so-mae' || alunas) && !temConta ? `/mae/cadastro?depois=${encodeURIComponent(aqui)}` : `/login?callbackUrl=${encodeURIComponent(aqui)}`)
+  // SOA + MAE sem sessão (pessoa nova): cria a conta e volta para o pagamento do PACOTE — quem já tem conta entra pelo "Entrar"
+  if (!ws) return ir((o === 'so-mae' || o === 'soa-mae' || alunas) && !temConta ? `/mae/cadastro?depois=${encodeURIComponent(aqui)}` : `/login?callbackUrl=${encodeURIComponent(aqui)}`)
   if (session.user.role !== 'ADMIN') return ir(tela)
   if (alunas) {
     // qualquer aluna (com ou sem o SOA): direto para o pagamento — inclusive o anual em N× (a página já mostrou as parcelas)
@@ -40,6 +41,12 @@ export async function GET(req: NextRequest) {
     if (o === 'anual-soa') {
       // pente-fino 16/10: a troca para o anual sai À VISTA (o parcelado do SOA fica para depois — o recorrente não parcela)
       const r = await criarCheckoutMigracao({ workspaceId: ws, parcelas: 1, baseUrl: url.origin })
+      return ir(r.ok ? r.link : tela)
+    }
+    // SOA + MAE para quem ainda NÃO paga o SOA = o PACOTE numa cobrança única (R$ 89,80/mês ou R$ 753/ano), direto —
+    // inclusive o anual em N× (16/10/2026, correção do Júnior). Quem já paga o SOA segue abaixo: o MAE à parte (R$ 39,90).
+    if (o === 'soa-mae' && !(await contaJaPagaSoa(ws))) {
+      const r = await criarCheckoutCombo({ workspaceId: ws, ciclo, parcelas: ciclo === 'anual' ? parcelas : 1, baseUrl: url.origin, metodo })
       return ir(r.ok ? r.link : tela)
     }
     // o plano é o da CONTA (SOA ativo → SOA + MAE; sem SOA ativo → só o MAE): clicou no outro, a tela explica

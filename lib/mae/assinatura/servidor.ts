@@ -13,6 +13,8 @@
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { OFERTA_ALUNAS, alunasAberta, precosAlunas, nomeDoItemAlunas, descricaoDoItemAlunas, marcaCheckoutAlunas, MARCA_COMPRA_ALUNAS, DIA_MARCA_ALUNAS, type OfertaMae } from './alunas'
+import { PLANO_COMBO, cobrancaCombo, jaPagaSoa, nomeDoItemCombo, descricaoDoItemCombo } from './combo'
+import { encerrarAssinaturasTrocadasPorPixAuto } from '@/lib/pagamento/asaas/pixAutomatico'
 import { criarLinkPixAuto, apagarLinkPixAuto, ehLinkDePagamento, pixAutoLigado } from '@/lib/pagamento/asaas/linkPixAuto'
 import { temAcesso } from '@/lib/assinatura'
 import { validarCartaoDoCheckout } from '@/lib/assinatura/validacaoCartao'
@@ -231,6 +233,69 @@ async function gravarAguardando(ws: string, plano: PlanoMaeVenda, ciclo: CicloMa
       "subscriptionId" = NULL, "proximoVencimento" = NULL, "canceladaEm" = NULL, "updatedAt" = NOW()`
 }
 
+// ── PACOTE SOA + MÉTODO MÃE numa cobrança única (ver ./combo.ts) ──────────────────────────────────────────────────
+/** A conta já paga o SOA? (então o MAE é à parte, R$ 39,90 — o SOA dela já é cobrado) */
+export async function contaJaPagaSoa(ws: string): Promise<boolean> {
+  const [w] = await prisma.$queryRaw<{ assinaturaStatus: string | null; liberacaoManual: boolean | null }[]>`
+    SELECT "assinaturaStatus", "liberacaoManual" FROM "Workspace" WHERE "id" = ${ws} LIMIT 1`.catch(() => [])
+  return !!w && jaPagaSoa(w)
+}
+
+/**
+ * Checkout do PACOTE (um item só: SOA + Método Mãe). Só para quem ainda NÃO paga o SOA (sem conta, em teste, cortada,
+ * cancelada, aguardando). Mensal = cartão recorrente (ou Pix Automático); anual = à vista Pix/cartão ou N× no cartão.
+ * Ao pagar, o webhook libera o SOA e o MAE juntos e encerra a assinatura antiga do SOA (sem cobrança dupla).
+ */
+export async function criarCheckoutCombo(p: { workspaceId: string; ciclo: CicloMae; parcelas?: number; baseUrl: string; metodo?: 'cartao' | 'pix' }): Promise<ResultadoCheckoutMae> {
+  const precos = precosMae()
+  if (!vendaMaeAtiva() || !precos) return { ok: false, erro: 'O Método Mãe ainda não está à venda.', status: 400 }
+  if (await contaJaPagaSoa(p.workspaceId)) return { ok: false, erro: 'Você já assina o SOA: o Método Mãe soma à sua assinatura por R$ 39,90/mês.', status: 409 }
+  const estado = await estadoMaeDaConta(p.workspaceId)
+  if (estado.moduloMae && estado.origem === 'cortesia') return { ok: false, erro: 'Esta conta já tem o Método Mãe liberado.', status: 400 }
+  const atual = await assinaturaMaeDaConta(p.workspaceId)
+  if (atual && (atual.status === 'TRIAL' || atual.status === 'ATIVA')) return { ok: false, erro: 'O Método Mãe já está ativo nesta conta.', status: 400 }
+  if (atual?.status === 'INADIMPLENTE' && atual.subscriptionId) { const f = await faturaEmAberto(atual.subscriptionId); if (f) return { ok: true, link: f, reaproveitado: true } }
+  const cobr = cobrancaCombo(precos, p.ciclo, p.parcelas ?? 1)
+  const pixAuto = p.ciclo === 'mensal' && p.metodo === 'pix' && pixAutoLigado()
+  const plano = PLANO_COMBO as unknown as PlanoMaeVenda
+  if (atual?.status === 'AGUARDANDO_PAGAMENTO' && atual.checkoutLink && (atual.plano as string) === PLANO_COMBO && atual.ciclo === p.ciclo && atual.parcelas === cobr.parcelas
+      && ehLinkDePagamento(atual.checkoutLink) === pixAuto && Math.abs(atual.valor - cobr.total) < 0.01)
+    return { ok: true, link: atual.checkoutLink, reaproveitado: true }
+  if (pixAuto) {
+    const l = await criarLinkPixAuto({ nome: nomeDoItemCombo('mensal'), descricao: `${descricaoDoItemCombo('mensal', cobr)} Pix Automático.`.slice(0, 150),
+      valor: cobr.total, externalReference: refAssinaturaMae(p.workspaceId), sucesso: `${p.baseUrl}/mae/assinatura?pago=1` })
+    if (!l.ok) return { ok: false, erro: l.erro, status: 502 }
+    if (atual?.status === 'AGUARDANDO_PAGAMENTO' && ehLinkDePagamento(atual.checkoutLink)) await apagarLinkPixAuto(atual.checkoutId)
+    await gravarAguardando(p.workspaceId, plano, 'mensal', 1, cobr.total, l.id, l.url)
+    console.log(`[MAE COMBO] link Pix Automático ws=${p.workspaceId} total=${cobr.total}`)
+    return { ok: true, link: l.url }
+  }
+  const anual = p.ciclo === 'anual', parcelado = anual && cobr.parcelas > 1
+  const corpo: Record<string, unknown> = {
+    billingTypes: anual && !parcelado ? ['CREDIT_CARD', 'PIX'] : ['CREDIT_CARD'],
+    chargeTypes: parcelado ? ['DETACHED', 'INSTALLMENT'] : anual ? ['DETACHED'] : ['RECURRENT'], minutesToExpire: 1440,
+    callback: { successUrl: `${p.baseUrl}/mae/assinatura?pago=1`, cancelUrl: `${p.baseUrl}/mae`, expiredUrl: `${p.baseUrl}/mae` },
+    items: [{ name: nomeDoItemCombo(p.ciclo), description: descricaoDoItemCombo(p.ciclo, cobr), quantity: 1, value: cobr.total }],
+    externalReference: refAssinaturaMae(p.workspaceId),
+    ...(parcelado ? { installment: { maxInstallmentCount: cobr.parcelas } } : anual ? {} : { subscription: { cycle: 'MONTHLY', nextDueDate: hojeSP() } }),
+  }
+  const r = await chamarAsaas<{ id?: string; link?: string }>('/checkouts', { metodo: 'POST', corpo })
+  if (!r.ok || !r.dados?.id || !r.dados?.link) { console.error(`[MAE COMBO] checkout falhou ws=${p.workspaceId}: ${r.erro}`); return { ok: false, erro: r.erro || 'Não consegui abrir a página de pagamento.', status: 502 } }
+  await gravarAguardando(p.workspaceId, plano, p.ciclo, cobr.parcelas, cobr.total, r.dados.id, r.dados.link)
+  console.log(`[MAE COMBO] checkout ws=${p.workspaceId} ${p.ciclo} ${cobr.parcelas}x total=${cobr.total}`)
+  return { ok: true, link: r.dados.link }
+}
+
+/** Pacote pago: o SOA fica ATIVO (até o próximo vencimento) e a assinatura antiga do SOA (ex.: a do teste) é encerrada. */
+async function soaDoComboPago(ws: string, ate: string) {
+  await prisma.$executeRaw`
+    UPDATE "Workspace" SET "assinaturaStatus" = 'ATIVA', "assinaturaOrigem" = 'asaas', "ativo" = true,
+      "assinaturaExpira" = GREATEST(COALESCE("assinaturaExpira", ${ate}::date), ${ate}::date), "updatedAt" = NOW()
+    WHERE "id" = ${ws} AND "liberacaoManual" IS NOT TRUE`
+  const n = await encerrarAssinaturasTrocadasPorPixAuto(ws, '__combo__')
+  console.log(`[MAE COMBO] pago ws=${ws} → SOA + MAE ativos até ${ate}${n ? ` · ${n} assinatura(s) antiga(s) do SOA encerrada(s)` : ''}`)
+}
+
 async function faturaEmAberto(sub: string): Promise<string | null> {
   const r = await chamarAsaas<{ data?: { status?: string; invoiceUrl?: string }[] }>(`/subscriptions/${sub}/payments?limit=10`, { exigirAtivo: false })
   return (r.dados?.data ?? []).find(x => ['OVERDUE', 'PENDING'].includes(String(x.status)))?.invoiceUrl ?? null
@@ -320,7 +385,10 @@ export async function aplicarPagamentoMae(evento: string, pag: PagamentoAsaas): 
   if (evento === 'PAYMENT_RECEIVED' || evento === 'PAYMENT_CONFIRMED') {
     const prox = proximoDoPagamento(venc, a.ciclo === 'anual' ? 'anual' : 'mensal', pag.installmentNumber)
     await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'ATIVA', "proximoVencimento" = GREATEST(COALESCE("proximoVencimento", ${prox}::date), ${prox}::date), "updatedAt" = NOW() WHERE "id" = ${a.id} AND "status" <> 'CANCELADA'`
-    if (a.status !== 'CANCELADA') await darAcesso(a.workspaceId, a.plano, a.ciclo, somarDias(prox, CARENCIA_DIAS_MAE))
+    const combo = a.plano === PLANO_COMBO
+    // pacote: o acesso do MAE é o de quem tem o SOA (addon) e o SOA fica ativo junto
+    if (a.status !== 'CANCELADA') await darAcesso(a.workspaceId, combo ? 'addon' : a.plano, a.ciclo, somarDias(prox, CARENCIA_DIAS_MAE))
+    if (combo && a.status !== 'CANCELADA') await soaDoComboPago(a.workspaceId, prox)
     await marcarCompraAlunasSeFor(a.workspaceId, (await assinaturaMaeDaConta(a.workspaceId))?.checkoutId ?? pag.checkoutSession ?? pag.paymentLink ?? null).catch(() => {})
     console.log(`[MAE ASSINATURA] pago ws=${a.workspaceId} → acesso até ${somarDias(prox, CARENCIA_DIAS_MAE)}`)
   } else if (evento === 'PAYMENT_OVERDUE') {
@@ -330,18 +398,23 @@ export async function aplicarPagamentoMae(evento: string, pag: PagamentoAsaas): 
     await prisma.$executeRaw`UPDATE "Workspace" SET "moduloMaeAte" = GREATEST(COALESCE("moduloMaeAte", ${somarDias(venc, CARENCIA_DIAS_MAE)}::date), ${somarDias(venc, CARENCIA_DIAS_MAE)}::date), "updatedAt" = NOW()
       WHERE "id" = ${a.workspaceId} AND COALESCE("moduloMaeOrigem", '') <> 'cortesia'`
     console.log(`[MAE ASSINATURA] vencida ws=${a.workspaceId} (carência até ${somarDias(venc, CARENCIA_DIAS_MAE)})`)
+    // pacote: o SOA atrasa junto (a carência de 3 dias do SOA conta do vencimento)
+    if (a.plano === PLANO_COMBO) await prisma.$executeRaw`UPDATE "Workspace" SET "assinaturaStatus" = 'INADIMPLENTE', "assinaturaExpira" = ${venc}::date, "updatedAt" = NOW() WHERE "id" = ${a.workspaceId} AND "assinaturaStatus" = 'ATIVA' AND "assinaturaOrigem" = 'asaas' AND "liberacaoManual" IS NOT TRUE`
     // os e-mails de atraso/bloqueio/cobrança saem da régua das mensalidades (lib/cobranca/reguaMensal.ts)
   } else if (evento === 'PAYMENT_REFUNDED' || evento === 'PAYMENT_CHARGEBACK_REQUESTED') {
     await prisma.$executeRaw`UPDATE "Workspace" SET "moduloMaeAte" = ${hojeSP()}::date, "updatedAt" = NOW() WHERE "id" = ${a.workspaceId} AND COALESCE("moduloMaeOrigem", '') <> 'cortesia'`
     console.log(`[MAE ASSINATURA] ${evento} ws=${a.workspaceId} → acesso cortado`)
+    if (a.plano === PLANO_COMBO) await prisma.$executeRaw`UPDATE "Workspace" SET "assinaturaStatus" = 'CORTADA', "updatedAt" = NOW() WHERE "id" = ${a.workspaceId} AND "assinaturaOrigem" = 'asaas' AND "liberacaoManual" IS NOT TRUE`
   }
   return true
 }
 
 /** Assinatura encerrada no Asaas (cancelada/inativada): vale até o fim do período pago. false = não é do MAE. */
 export async function aplicarFimAssinaturaMae(sub: string): Promise<boolean> {
-  const [a] = await prisma.$queryRaw<{ id: string; workspaceId: string }[]>`SELECT "id","workspaceId" FROM "MaeAssinatura" WHERE "subscriptionId" = ${sub} LIMIT 1`.catch(() => [])
+  const [a] = await prisma.$queryRaw<{ id: string; workspaceId: string; plano: string }[]>`SELECT "id","workspaceId","plano" FROM "MaeAssinatura" WHERE "subscriptionId" = ${sub} LIMIT 1`.catch(() => [])
   if (!a) return false
+  // pacote cancelado: o SOA também (vale até o fim do período pago — assinaturaExpira)
+  if (a.plano === PLANO_COMBO) await prisma.$executeRaw`UPDATE "Workspace" SET "assinaturaStatus" = 'CANCELADA', "updatedAt" = NOW() WHERE "id" = ${a.workspaceId} AND "assinaturaOrigem" = 'asaas' AND "liberacaoManual" IS NOT TRUE`
   await prisma.$executeRaw`UPDATE "MaeAssinatura" SET "status" = 'CANCELADA', "canceladaEm" = COALESCE("canceladaEm", NOW()), "canceladaPor" = COALESCE("canceladaPor", 'asaas'), "updatedAt" = NOW() WHERE "id" = ${a.id}`
   console.log(`[MAE ASSINATURA] encerrada no Asaas ws=${a.workspaceId} (acesso até o fim do período pago)`)
   await emailCanceladaMae(a.workspaceId, (await estadoMaeDaConta(a.workspaceId)).ate)

@@ -98,6 +98,27 @@ describe('criarCheckoutMae', () => {
     expect(it0.value).toBe(39.9); expect(it0.name).not.toMatch(/Alunas/)
     expect((chamadas[0].corpo!.callback as { successUrl: string }).successUrl).toContain('/mae/alunas?pago=1')
   })
+  it('PACOTE SOA + MAE (16/10): um item só de R$ 89,80/mês (recorrente) e R$ 753 à vista; o pagamento ativa o SOA e o MAE', async () => {
+    const { criarCheckoutCombo, aplicarPagamentoMae } = await import('@/lib/mae/assinatura/servidor')
+    const r = await criarCheckoutCombo({ workspaceId: 'ws8', ciclo: 'mensal', baseUrl: 'https://x' })
+    expect(r.ok).toBe(true)
+    const c = chamadas.find(x => x.caminho === '/checkouts')!
+    const it0 = (c.corpo!.items as { value: number; name: string }[])
+    expect(it0).toHaveLength(1); expect(it0[0].name).toBe('SOA + Método Mãe · mensal')
+    expect(it0[0].value).toBeCloseTo(89.8, 2)
+    expect(c.corpo).toMatchObject({ chargeTypes: ['RECURRENT'], billingTypes: ['CREDIT_CARD'], externalReference: 'MAEA:ws8', subscription: { cycle: 'MONTHLY' } })
+    chamadas.length = 0
+    await criarCheckoutCombo({ workspaceId: 'ws8', ciclo: 'anual', parcelas: 1, baseUrl: 'https://x' })
+    expect((chamadas.find(x => x.caminho === '/checkouts')!.corpo!.items as { value: number }[])[0].value).toBe(753)
+    // webhook: pagamento do pacote → SOA ATIVA (origem asaas) + acesso do MAE
+    linhaAssinatura = { id: 'm8', workspaceId: 'ws8', plano: 'combo', ciclo: 'mensal', status: 'AGUARDANDO_PAGAMENTO', subscriptionId: 'sub_combo', parcelas: 1, valor: 89.8 }
+    const { prisma } = await import('@/lib/prisma')
+    ;(prisma.$executeRaw as unknown as { mockClear: () => void }).mockClear()
+    await aplicarPagamentoMae('PAYMENT_CONFIRMED', { id: 'pay_1', subscription: 'sub_combo', dueDate: '2026-10-17' })
+    const sqls = (prisma.$executeRaw as unknown as { mock: { calls: [TemplateStringsArray][] } }).mock.calls.map(x => x[0].join('?'))
+    expect(sqls.some(s => s.includes('"assinaturaStatus" = \'ATIVA\'') && s.includes('"assinaturaOrigem" = \'asaas\''))).toBe(true)
+    expect(sqls.some(s => s.includes('"moduloMae" = true'))).toBe(true)
+  })
   it('quem já testou começa pagando hoje (sem 2º trial)', async () => {
     linhaAssinatura = { status: 'CANCELADA', trialUsado: true, valor: 0, ciclo: 'mensal', parcelas: 1, plano: 'addon' }
     const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
