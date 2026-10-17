@@ -15,6 +15,7 @@ import { criarCanvasOffscreen } from '@/lib/mae/render/protocolo'
 import { registroFontes, useFontes, carregarSubstituta } from './fontesTexto'
 import { sync } from './sincronia'
 import { useEditor } from './estado'
+import CorComPaleta from './CorComPaleta'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ico = 'p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30'
@@ -80,7 +81,7 @@ function Num({ rotulo, valor, min, max, passo, sufixo = '', escala = 1, onMudar,
     </label>
   )
 }
-const CorIn = ({ valor, onMudar }: { valor: string; onMudar: (v: string) => void }) => <input type="color" value={valor} onChange={e => onMudar(e.target.value)} className="w-7 h-6 rounded border border-gray-200" />
+const CorIn = ({ valor, onMudar }: { valor: string; onMudar: (v: string) => void }) => <CorComPaleta value={valor} onChange={cor => onMudar(cor)} className="w-7 h-6 rounded border border-gray-200" />
 
 function CamposEfeito({ e, mudar }: { e: Ef; mudar: (p: Partial<Ef>, juntar?: string) => void }) {
   const op = <Num rotulo="Opacidade" valor={e.opacity} min={0} max={1} passo={0.01} escala={100} sufixo="%" onMudar={(v, j) => mudar({ opacity: v } as Partial<Ef>, j)} />

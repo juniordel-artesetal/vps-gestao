@@ -20,6 +20,7 @@ import { EditorPixelsTema } from './EditorPixels'
 import { useMaeDoc } from '@/lib/mae/editor/loja'
 import { acharFace } from '@/lib/mae/vinculo/partes'
 import { arteDaFace } from '@/lib/mae/vinculo/cenario'
+import CorComPaleta from './CorComPaleta'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 type CamadaTema = DocTema['partContent'][string][number]
@@ -60,7 +61,7 @@ function ControlesAjuste({ a, on }: { a: Ajuste; on: (p: Partial<Ajuste>) => voi
     }
     case 'vibrance': return <>{D('Vibração', 'vibrance', -100, 100)}{D('Saturação', 'saturation', -100, 100)}</>
     case 'blackWhite': return <>{(['reds', 'yellows', 'greens', 'cyans', 'blues', 'magentas'] as const).map((k, i) => D(['Vermelhos', 'Amarelos', 'Verdes', 'Cianos', 'Azuis', 'Magentas'][i], k, -200, 300))}
-      <label className="flex items-center gap-1 text-[11px]"><input type="checkbox" checked={!!a.tint} onChange={e => on({ tint: e.target.checked ? '#c8a165' : undefined } as never)} /> Tonalizar {a.tint && <input type="color" value={a.tint} onChange={e => on({ tint: e.target.value } as never)} className="h-5 w-6" />}</label></>
+      <label className="flex items-center gap-1 text-[11px]"><input type="checkbox" checked={!!a.tint} onChange={e => on({ tint: e.target.checked ? '#c8a165' : undefined } as never)} /> Tonalizar {a.tint && <CorComPaleta value={a.tint} onChange={cor => on({ tint: cor } as never)} className="h-5 w-6" />}</label></>
     case 'gradientMap': return (
       <div className="flex items-center gap-1 text-[11px]">Escuros <input type="color" value={a.stops[0].color} onChange={e => on({ stops: [{ pos: 0, color: e.target.value }, a.stops[a.stops.length - 1]] } as never)} className="h-5 w-6" />
         Claros <input type="color" value={a.stops[a.stops.length - 1].color} onChange={e => on({ stops: [a.stops[0], { pos: 1, color: e.target.value }] } as never)} className="h-5 w-6" /></div>
@@ -215,9 +216,9 @@ export default function PainelEdicao({ camadaId, soAplique = false, faceAlvo = n
           <p className="font-semibold">Forma</p>
           <div className="flex flex-wrap items-center gap-1.5">
             <label className="flex items-center gap-1"><input type="checkbox" checked={c.fill !== null} onChange={e => mudar(c.id, 'Preenchimento', cc => { if (cc.type === 'shape') cc.fill = e.target.checked ? '#f472b6' : null })} /> Preencher</label>
-            {c.fill && <input type="color" value={c.fill} onChange={e => mudar(c.id, 'Cor da forma', cc => { if (cc.type === 'shape') cc.fill = e.target.value }, `fill:${c.id}`)} className="h-5 w-6" data-cor-forma />}
+            {c.fill && <CorComPaleta value={c.fill} onChange={cor => mudar(c.id, 'Cor da forma', cc => { if (cc.type === 'shape') cc.fill = cor }, `fill:${c.id}`)} className="h-5 w-6" data-cor-forma />}
             <label className="flex items-center gap-1"><input type="checkbox" checked={!!c.stroke} onChange={e => mudar(c.id, 'Traçado', cc => { if (cc.type === 'shape') cc.stroke = e.target.checked ? { color: '#1f2937', widthMm: 0.8 } : null })} data-traco-forma /> Traçado</label>
-            {c.stroke && <><input type="color" value={c.stroke.color} onChange={e => mudar(c.id, 'Cor do traçado', cc => { if (cc.type === 'shape' && cc.stroke) cc.stroke.color = e.target.value }, `stc:${c.id}`)} className="h-5 w-6" />
+            {c.stroke && <><CorComPaleta value={c.stroke.color} onChange={cor => mudar(c.id, 'Cor do traçado', cc => { if (cc.type === 'shape' && cc.stroke) cc.stroke.color = cor }, `stc:${c.id}`)} className="h-5 w-6" />
               <input inputMode="decimal" defaultValue={String(c.stroke.widthMm).replace('.', ',')} key={c.stroke.widthMm} onBlur={e => { const v = Number(e.target.value.replace(',', '.')); if (v > 0 && v <= 20) mudar(c.id, 'Espessura do traçado', cc => { if (cc.type === 'shape' && cc.stroke) cc.stroke.widthMm = v }) }} className="w-10 rounded border border-gray-200 bg-transparent px-1" aria-label="Espessura do traçado em mm" /> mm</>}
           </div>
           {c.kind === 'rect' && <Controle rotulo="Cantos arredondados" v={c.params.radius} min={0} max={0.5} passo={0.01} onChange={v => mudar(c.id, 'Cantos', cc => { if (cc.type === 'shape') cc.params.radius = v }, `rad:${c.id}`)} />}

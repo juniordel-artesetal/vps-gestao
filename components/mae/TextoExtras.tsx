@@ -27,6 +27,7 @@ import { useEditor } from './estado'
 import { nomeOT } from '@/lib/mae/texto/opentype'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
 import SeletorFonte from './SeletorFonte'
+import CorComPaleta from './CorComPaleta'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativo = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -160,7 +161,7 @@ export function FundoDoTexto({ estilo, mudar }: { estilo: EstiloTexto; mudar: Mu
       </div>
       {f?.tipo === 'imagem' && <p className="rounded bg-violet-50 px-1.5 py-1 text-[10px] text-violet-900" data-logo-saiu>A logo atrás do nome agora é um <b>elemento</b> + o texto por cima, <b>agrupados</b>. Use o botão “Converter” no topo do painel Tema (fica no mesmo lugar), ou “Sem fundo” para tirar.</p>}
       {f?.tipo === 'retangulo' && (<>
-        <div className="flex items-center gap-1.5 text-[11px]">Cor <input type="color" value={f.cor} onChange={e => set({ cor: e.target.value }, 'Cor da faixa', 'fundo:cor')} className="h-6 w-8 rounded border border-gray-200" data-fundo-cor />
+        <div className="flex items-center gap-1.5 text-[11px]">Cor <CorComPaleta value={f.cor} onChange={cor => set({ cor: cor }, 'Cor da faixa', 'fundo:cor')} className="h-6 w-8 rounded border border-gray-200" data-fundo-cor />
           <button className={btn} onClick={() => setEscolher(escolher === 'papel' ? null : 'papel')}>{f.textura ? <MiniaturaArquivo path={f.textura.path} className="h-4 w-4" /> : null} Papel dentro…</button>
           {f.textura && <button className={btn} onClick={() => set({ textura: undefined }, 'Faixa sem papel')} aria-label="Tirar o papel"><Trash2 className="w-3 h-3" /></button>}
         </div>

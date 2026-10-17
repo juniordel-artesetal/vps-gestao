@@ -31,6 +31,7 @@ import { rotuloVariavel } from '@/lib/mae/texto/variaveis'
 import { letrasSemGlifo, LETRAS_ACENTUADAS_PT } from '@/lib/mae/texto/diagramar'
 import { estiloEfetivo, mudarEstiloTexto } from './estiloTexto'
 import { marcarRefTexto } from '@/lib/mae/vinculo/tema'
+import CorComPaleta from './CorComPaleta'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativoCls = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -229,7 +230,7 @@ export default function PainelTexto({ modoPedido }: { modoPedido?: boolean } = {
         <div className="flex items-center gap-1">
           <SeletorFonte atual={{ valor: `${estilo.font.source}|${estilo.font.postscriptName}`, family: estilo.font.family ?? estilo.font.postscriptName }} locais={locais} amostra={variavel === 'HASHTAG' ? valor : (tema.sample?.NOME ?? 'Ana Júlia')}
             onPrevia={v => void previaFonte(v)} onEscolher={v => void escolherFonte(v)} />
-          <input type="color" value={estilo.color} onChange={e => mudar('Cor do texto', x => { x.color = e.target.value }, 'cor')} className="w-8 h-7 rounded border border-gray-200" data-cor-texto />
+          <CorComPaleta value={estilo.color} onChange={cor => mudar('Cor do texto', x => { x.color = cor }, 'cor')} className="w-8 h-7 rounded border border-gray-200" data-cor-texto />
         </div>
         {(permissao === 'pedir' || permissao === 'desconhecida') && <button className={btn + ' w-full justify-center'} onClick={() => listarLocais(true)} data-liberar-fontes><Unlock className="w-3.5 h-3.5" /> Liberar as fontes do computador</button>}
         {permissao === 'negada' && <p className="text-[10px] text-red-600">O navegador bloqueou as fontes do computador (cadeado na barra de endereço → Fontes → Permitir).</p>}
@@ -409,7 +410,7 @@ function CorPorLetra({ estilo, mudar }: { estilo: EstiloTexto; mudar: (label: st
         <div className="flex flex-wrap items-center gap-1" data-sequencia-cores>
           {cores.map((c, i) => (
             <span key={i} className="inline-flex items-center gap-0.5">
-              <input type="color" value={c} onChange={ev => mudar('Cor da letra', e => { if (e.porLetra) e.porLetra.cores[i] = ev.target.value }, `porletra:${i}`)} className="w-7 h-6 rounded border border-gray-200" data-cor-letra={i} />
+              <CorComPaleta value={c} onChange={cor => mudar('Cor da letra', e => { if (e.porLetra) e.porLetra.cores[i] = cor }, `porletra:${i}`)} className="w-7 h-6 rounded border border-gray-200" data-cor-letra={i} />
               {cores.length > 1 && <button className="text-[10px] text-gray-400 hover:text-red-600" title="Tirar esta cor" onClick={() => mudar('Tirar cor da sequência', e => { if (e.porLetra) e.porLetra.cores.splice(i, 1) })} data-tirar-cor-letra={i}>×</button>}
             </span>
           ))}

@@ -65,7 +65,7 @@ import { ROTULO_CATEGORIA, type CategoriaEstilo } from '@/lib/mae/editor/estiloC
 import { atalhoDoEvento } from '@/lib/mae/editor/atalhos'
 import ListaAtalhos from './Atalhos'
 import { salvar as salvarTrabalho } from './historicoGlobal'
-import { guardarImagem, infoImagem, lerIdentidade } from './arquivosMae'
+import { guardarImagem, infoImagem, infoEmCache, lerIdentidade } from './arquivosMae'
 import { arrobaDe } from './exportarMae'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import { registroFontes, garantirFontesDoTema, useFontes } from './fontesTexto'
@@ -536,6 +536,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
       }
       else if (!ctrl && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) && moverComSetas(e.key, e.shiftKey)) e.preventDefault()
       else if (e.key === 'Escape') {
+        if (ed.pincel) { ed.set({ pincel: null }); return }
         if (ed.grupoSel || ed.multiSel.length) ed.set({ grupoSel: null, multiSel: [] })
         const m = useMoldes.getState()
         if (m.pontos.length || m.modo !== 'selecionar') m.set({ pontos: [], moldeDosPontos: null, modo: 'selecionar' })
@@ -937,6 +938,7 @@ export default function EditorMae({ secao }: { secao?: string } = {}) {
             )}
             <AvisoSemFace />
             <AvisoRapido />
+            <FaixaPincel />
             {folhasAplique && (
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full border border-sky-200 bg-white/95 px-3 py-1 text-[11px] shadow" data-aviso-folhas-aplique>
                 <span className="text-sky-700 font-semibold">Folhas de aplique (prévia, não vão no arquivo do tema)</span>
@@ -1101,6 +1103,21 @@ function AvisoRapido() {
       {msg}
       {/* Lote 10 (item 159): ação no aviso ("Excluir de todas as caixas") */}
       {botao && <button className="rounded-full bg-white/15 px-2 py-0.5 font-semibold hover:bg-white/25" onClick={() => { useEditor.getState().set({ avisoRapido: null, avisoBotao: null }); botao.acao() }} data-aviso-botao>{botao.rotulo}</button>}
+    </div>
+  )
+}
+
+/** Lote 21 (item 255): o pincel carregado — clique nas faces para aplicar; Esc ou "Soltar" para parar. */
+function FaixaPincel() {
+  const p = useEditor(s => s.pincel), modo = useEditor(s => s.modo)
+  if (!p || modo !== 'tema') return null
+  const url = infoEmCache(p.path)?.url
+  return (
+    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-orange-600 px-3 py-1 text-[11px] text-white shadow" role="status" data-faixa-pincel>
+      {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
+      {url && <img src={url} alt="" className="h-5 w-5 rounded object-cover ring-1 ring-white/70" />}
+      <span>Pincel: <b>{p.path.split('/').pop()}</b> — clique nas faces para aplicar (Alt = só nesta caixa)</span>
+      <button className="rounded-full bg-white/20 px-2 py-0.5 font-semibold hover:bg-white/30" onClick={() => useEditor.getState().set({ pincel: null })} data-soltar-pincel>Soltar (Esc)</button>
     </div>
   )
 }

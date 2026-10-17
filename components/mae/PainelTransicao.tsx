@@ -9,6 +9,7 @@ import { useBiblioteca } from '@/lib/mae/editor/loja'
 import { NOMES_DIRECAO, TRANSICAO_PADRAO, type DirecaoTransicao, type Transicao } from '@/lib/mae/vinculo/transicao'
 import { infoImagem, infoEmCache, listarImagens } from './arquivosMae'
 import { criarTransicaoNaParte, criarTransicaoCorNaParte, criarTransicaoElementoNaParte, mudarTransicao } from './acoesVinculo'
+import CorComPaleta from './CorComPaleta'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativo = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -92,9 +93,9 @@ export default function PainelTransicao({ partId, onCriada, sempreAberto = false
       </div>
       {tipo === 'cor' ? (
         <div className="space-y-1.5" data-transicao-cor>
-          <label className="flex items-center gap-2 text-[11px] text-gray-600">Cor que entra por cima <input type="color" value={cor} onChange={e => setCor(e.target.value)} className="h-6 w-8 rounded border border-gray-200" data-cor-transicao /></label>
+          <label className="flex items-center gap-2 text-[11px] text-gray-600">Cor que entra por cima <CorComPaleta value={cor} onChange={cor => setCor(cor)} className="h-6 w-8 rounded border border-gray-200" data-cor-transicao /></label>
           <label className="flex items-center gap-1.5 text-[11px] text-gray-600"><input type="checkbox" checked={corParaCor} onChange={e => setCorParaCor(e.target.checked)} className="accent-orange-500" data-cor-para-cor /> Cor para cor (sem papel embaixo)</label>
-          {corParaCor && <label className="flex items-center gap-2 text-[11px] text-gray-600">Cor de baixo <input type="color" value={corBaixo} onChange={e => setCorBaixo(e.target.value)} className="h-6 w-8 rounded border border-gray-200" data-cor-baixo-transicao /></label>}
+          {corParaCor && <label className="flex items-center gap-2 text-[11px] text-gray-600">Cor de baixo <CorComPaleta value={corBaixo} onChange={cor => setCorBaixo(cor)} className="h-6 w-8 rounded border border-gray-200" data-cor-baixo-transicao /></label>}
           <button className={btn + ' !border-orange-500 bg-orange-500 text-white'} onClick={aplicarCor} data-aplicar-transicao-cor>Aplicar a transição de cor</button>
         </div>
       ) : <>

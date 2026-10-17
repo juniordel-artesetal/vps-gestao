@@ -54,6 +54,7 @@ import BuscaTemas, { type TemaBusca } from './BuscaTemas'
 import TodosTemas from './TodosTemas'
 import { lembrarTemaRecente } from '@/lib/mae/editor/buscaTemas'
 import PainelSelecao from './PainelSelecao'
+import CorComPaleta from './CorComPaleta'
 
 const FORMAS: { kind: 'rect' | 'ellipse' | 'polygon' | 'star' | 'heart' | 'line'; rotulo: string; aspect: number }[] = [
   { kind: 'rect', rotulo: 'Retângulo', aspect: 1.5 }, { kind: 'ellipse', rotulo: 'Elipse', aspect: 1 }, { kind: 'polygon', rotulo: 'Polígono', aspect: 1 },
@@ -117,6 +118,21 @@ function Biblioteca({ onUsar, parte }: { onUsar: (a: ArquivoImagem, empilhar: bo
   const itensTema = listas?.chave === chave ? listas.tema : [], itensGeral = listas?.chave === chave ? listas.geral : [], itensOutros = listas?.chave === chave ? listas.outros : []
   const [outros, setOutros] = useState(false)
   const [, setV] = useState(0)
+  // Lote 21 (item 255): aplicar sem arrastar — clique (na parte ativa), "Aplicar em… ▾", pincel e tela cheia com busca
+  const partesBase = useMaeDoc(s => s.hist.atual.parts).filter(p => p.instances.length)
+  const pincel = useEditor(s => s.pincel)
+  const [menuEm, setMenuEm] = useState<string | null>(null)
+  const [cheia, setCheia] = useState(false)
+  const [busca, setBusca] = useState('')
+  const [alvoCheia, setAlvoCheia] = useState<string | null>(null)
+  const aplicarEm = (partId: string, i: ArquivoImagem, empilhar = false) => { soltarNaParte(partId, i, empilhar); setMenuEm(null); avisar(`${/^Papéis\//i.test(i.path) ? 'Papel' : 'Elemento'} aplicado em ${partesBase.find(p => p.id === partId)?.name ?? 'parte'}`) }
+  const carregarPincel = (i: ArquivoImagem) => { const atual = useEditor.getState().pincel; useEditor.getState().set({ pincel: atual?.path === i.path ? null : i }); setMenuEm(null) }
+  useEffect(() => {
+    if (!cheia) return
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); setCheia(false) } }
+    window.addEventListener('keydown', esc, true)
+    return () => window.removeEventListener('keydown', esc, true)
+  }, [cheia])
   useEffect(() => {
     if (!raiz || !liberada || pasta === 'Cor') return
     let vivo = true
@@ -162,24 +178,74 @@ Ele sai da lista, mas fica guardado — esses temas continuam funcionando. Apaga
     }
     inp.click()
   }
+  const miniatura = (p: string, grande = false, aoClicar?: (i: ArquivoImagem, shift: boolean) => void) => {
+    const i = infoEmCache(p)
+    const nome = p.split('/').pop()
+    const usarAqui = aoClicar ?? ((x: ArquivoImagem, shift: boolean) => onUsar(x, shift))
+    return (
+      <div key={p} className="group relative">
+      <button draggable title={`${nome}${uso?.get(p)?.length ? ` — em uso em ${uso.get(p)!.length} tema(s)` : ''}\nClique: aplica${parte ? ` em ${parte.name}` : ''} · Shift: por cima · ou arraste`} className={`aspect-square w-full rounded border bg-gray-100 overflow-hidden hover:border-orange-400 ${pincel?.path === p ? 'border-orange-500 ring-2 ring-orange-400' : 'border-gray-200'}`}
+        onDragStart={e => { e.dataTransfer.setData(TIPO_ARRASTE, p); e.dataTransfer.effectAllowed = 'copy' }}
+        onClick={e => i && usarAqui(i, e.shiftKey)} data-arquivo={p}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
+        {i ? <img src={i.url} alt="" className="w-full h-full object-cover" /> : null}
+      </button>
+      {grande && <p className="truncate text-[10px] text-gray-500" title={nome}>{nome}</p>}
+      {!!uso?.get(p)?.length && <span className="pointer-events-none absolute bottom-0.5 left-0.5 rounded bg-white/90 px-0.5 text-[8px] text-gray-700" data-em-uso={uso.get(p)!.length}>{uso.get(p)!.length} tema{uso.get(p)!.length > 1 ? 's' : ''}</span>}
+      <button className="absolute right-0.5 top-0.5 hidden rounded bg-white/90 px-1 text-[10px] text-red-600 group-hover:block" onClick={() => void apagar(p)} title="Apagar da Biblioteca (mostra antes onde é usado)" aria-label={`Apagar ${nome}`} data-apagar-arquivo={p}>×</button>
+      {i && <div className={`absolute left-0.5 top-0.5 gap-0.5 ${menuEm === p ? 'flex' : 'hidden group-hover:flex'}`}>
+        <button className="rounded bg-white/90 px-1 text-[10px] text-gray-700 hover:text-orange-700" onClick={() => setMenuEm(menuEm === p ? null : p)} title="Aplicar em… (escolher a parte)" aria-label={`Aplicar ${nome} em…`} data-aplicar-em={p}>▾</button>
+        <button className={`rounded px-1 text-[10px] ${pincel?.path === p ? 'bg-orange-500 text-white' : 'bg-white/90 text-gray-700 hover:text-orange-700'}`} onClick={() => carregarPincel(i)} title="Pincel: depois clique nas faces da arte para aplicar (Esc solta)" aria-label={`Pincel com ${nome}`} data-pincel={p}>🖌</button>
+      </div>}
+      {i && menuEm === p && (
+        <div className="absolute left-0 top-5 z-30 min-w-[9rem] max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 text-[11px] shadow-lg dark:bg-gray-900" data-menu-aplicar-em>
+          <p className="px-1.5 py-0.5 text-[10px] text-gray-400">Aplicar em…</p>
+          {partesBase.map(pt => <button key={pt.id} className="block w-full rounded px-1.5 py-1 text-left hover:bg-orange-50 dark:hover:bg-orange-950/40" onClick={e => aplicarEm(pt.id, i, e.shiftKey)} data-aplicar-parte={pt.name}>{pt.name}</button>)}
+          {!partesBase.length && <p className="px-1.5 py-1 text-gray-400">A base não tem partes.</p>}
+        </div>
+      )}
+      </div>
+    )
+  }
   const grade = (lista: string[], vazio: string) => (
     <div className="grid grid-cols-4 gap-1 max-h-40 overflow-y-auto" data-miniaturas>
-      {lista.map(p => {
-        const i = infoEmCache(p)
-        return (
-          <div key={p} className="group relative">
-          <button draggable title={`${p.split('/').pop()}${uso?.get(p)?.length ? ` — em uso em ${uso.get(p)!.length} tema(s)` : ''}`} className="aspect-square w-full rounded border border-gray-200 bg-gray-100 overflow-hidden hover:border-orange-400"
-            onDragStart={e => { e.dataTransfer.setData(TIPO_ARRASTE, p); e.dataTransfer.effectAllowed = 'copy' }}
-            onDoubleClick={e => i && onUsar(i, e.shiftKey)} data-arquivo={p}>
-            {/* eslint-disable-next-line @next/next/no-img-element -- miniatura local (blob:) */}
-            {i ? <img src={i.url} alt="" className="w-full h-full object-cover" /> : null}
-          </button>
-          {!!uso?.get(p)?.length && <span className="pointer-events-none absolute bottom-0.5 left-0.5 rounded bg-white/90 px-0.5 text-[8px] text-gray-700" data-em-uso={uso.get(p)!.length}>{uso.get(p)!.length} tema{uso.get(p)!.length > 1 ? 's' : ''}</span>}
-          <button className="absolute right-0.5 top-0.5 hidden rounded bg-white/90 px-1 text-[10px] text-red-600 group-hover:block" onClick={() => void apagar(p)} title="Apagar da Biblioteca (mostra antes onde é usado)" aria-label={`Apagar ${p.split('/').pop()}`} data-apagar-arquivo={p}>×</button>
-          </div>
-        )
-      })}
+      {lista.map(p => miniatura(p))}
       {!lista.length && <p className="col-span-4 text-[11px] text-gray-400">{vazio}</p>}
+    </div>
+  )
+  const termo = busca.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const filtrar = (l: string[]) => termo ? l.filter(p => p.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(termo)) : l
+  const alvoDaCheia = alvoCheia && partesBase.some(p => p.id === alvoCheia) ? alvoCheia : parte?.id ?? partesBase[0]?.id ?? null
+  const telaCheia = cheia && (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label={`${pasta} em tela cheia`} onClick={e => { if (e.target === e.currentTarget) setCheia(false) }} data-biblioteca-cheia>
+      <div className="flex h-full max-h-[90vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
+        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 p-3 dark:border-gray-700">
+          <p className="text-sm font-semibold">{pasta}</p>
+          <input autoFocus value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar pelo nome do arquivo…" className="min-w-[12rem] flex-1 rounded-lg border border-gray-300 px-2 py-1 text-xs dark:border-gray-600 dark:bg-gray-800" data-busca-biblioteca />
+          <label className="flex items-center gap-1 text-xs">Clique aplica em
+            <select value={alvoDaCheia ?? ''} onChange={e => setAlvoCheia(e.target.value)} className="rounded-lg border border-gray-300 px-1 py-1 text-xs dark:border-gray-600 dark:bg-gray-800" data-alvo-cheia>
+              {partesBase.map(pt => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+            </select>
+          </label>
+          <button className={btn} onClick={() => setCheia(false)} aria-label="Fechar" data-fechar-cheia><X className="w-3.5 h-3.5" /> Fechar</button>
+        </div>
+        <div className="flex-1 space-y-3 overflow-y-auto p-3">
+          {([['Deste tema', itensTema], ['Uso geral', itensGeral], ['Outros temas', itensOutros]] as const).map(([titulo, l]) => {
+            const f = filtrar(l)
+            if (!f.length) return null
+            return (
+              <div key={titulo}>
+                <p className="mb-1 text-[11px] font-semibold text-gray-600">{titulo} <span className="font-normal text-gray-400">({f.length})</span></p>
+                <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8" data-miniaturas-cheia>
+                  {f.map(p => miniatura(p, true, (i, shift) => { if (alvoDaCheia) aplicarEm(alvoDaCheia, i, shift) }))}
+                </div>
+              </div>
+            )
+          })}
+          {![itensTema, itensGeral, itensOutros].some(l => filtrar(l).length) && <p className="text-xs text-gray-400">Nada com “{busca}”.</p>}
+        </div>
+        <p className="border-t border-gray-200 px-3 py-2 text-[10px] text-gray-500 dark:border-gray-700">Clique aplica na parte escolhida · Shift + clique = por cima · ▾ escolhe outra parte · 🖌 carrega o pincel (feche e clique nas faces da arte).</p>
+      </div>
     </div>
   )
   return (
@@ -189,7 +255,11 @@ Ele sai da lista, mas fica guardado — esses temas continuam funcionando. Apaga
         {pasta !== 'Cor' && <button className={btn + ' ml-auto'} disabled={!liberada} onClick={() => void adicionar()} title={`Guarda em ${pastaTema}/`} data-adicionar-arquivo><ImagePlus className="w-3.5 h-3.5" /> Adicionar…</button>}
       </div>
       {pasta === 'Cor' ? (parte ? <PainelCor partId={parte.id} nomeParte={parte.name} /> : <p className="text-[11px] text-gray-400">Escolha uma parte abaixo.</p>) : (<>
-      <p className="text-[10px] text-gray-400">Arraste para uma parte (abaixo) ou para uma face na folha. Com <b>Alt</b> na face = só naquela caixa.</p>
+      <div className="flex items-start gap-1">
+        <p className="text-[10px] text-gray-400" data-dica-aplicar><b>Clique</b> aplica{parte ? <> em <b>{parte.name}</b></> : ''} · <b>▾</b> escolhe a parte · <b>🖌</b> pincel (clique nas faces) · ou arraste. Com <b>Alt</b> na face = só naquela caixa.</p>
+        <button className="ml-auto shrink-0 text-[10px] underline text-orange-700" onClick={() => { setBusca(''); setOutros(true); setCheia(true) }} title="Ver em tela cheia, com busca e miniaturas maiores" data-abrir-cheia>⤢ Ampliar</button>
+      </div>
+      {telaCheia}
       <p className="text-[10px] font-semibold text-gray-600">Deste tema</p>
       {grade(itens, `Nada ainda — "Adicionar…" guarda em ${pastaTema}/.`)}
       <div className="flex items-center gap-1"><p className="text-[10px] font-semibold text-gray-600">Uso geral</p><button className="ml-auto text-[10px] underline text-gray-500" disabled={!liberada} onClick={() => void adicionar(pastaGeral)}>adicionar aqui</button></div>
@@ -805,7 +875,7 @@ export function AbasDoTema() {
       <div className="flex flex-wrap gap-1">
         <button className={b(modo === 'vizinha')} onClick={() => set('Abas com o papel da face vizinha', t => { delete t.overflowFill; delete t.abasCor })} data-abas="vizinha">Papel da face vizinha</button>
         <button className={b(modo === 'papel')} onClick={() => setEscolher(!escolher)} data-abas="papel">{tema.overflowFill ? <MiniaturaArquivo path={tema.overflowFill.path} className="h-4 w-4" /> : null} Um papel…</button>
-        <label className={b(modo === 'cor') + ' cursor-pointer'} data-abas="cor">Cor <input type="color" value={tema.abasCor ?? '#ffffff'} onChange={e => set('Cor das abas', t => { delete t.overflowFill; t.abasCor = e.target.value })} className="h-4 w-6" /></label>
+        <label className={b(modo === 'cor') + ' cursor-pointer'} data-abas="cor">Cor <CorComPaleta value={tema.abasCor ?? '#ffffff'} onChange={cor => set('Cor das abas', t => { delete t.overflowFill; t.abasCor = cor })} className="h-4 w-6" /></label>
       </div>
       {modo === 'base' && <p className="text-[10px] text-amber-700">Esta base ainda tem um papel das abas antigo (vale para todos os temas dela) — escolha aqui o deste tema.</p>}
       {escolher && <SeletorImagem pastas={['Papéis']} atual={tema.overflowFill?.path} onEscolher={a => { set('Papel das abas', t => { delete t.abasCor; t.overflowFill = { path: a.path, sha256: a.sha256, aspect: a.aspect } }); setEscolher(false) }} />}

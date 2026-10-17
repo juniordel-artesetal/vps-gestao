@@ -21,6 +21,7 @@ import { editarCamadaTema, mudarTransicao } from './acoesVinculo'
 import { adicionarRapido, VARIAVEIS_RAPIDAS } from './TextosPaginas'
 import { estiloEfetivo, mudarEstiloTexto, emAjusteDoPedido } from './estiloTexto'
 import { usePedidoAberto } from './pedidosMae'
+import CorComPaleta from './CorComPaleta'
 
 const b = (on = false) => `rounded-md border px-1.5 py-0.5 text-[11px] ${on ? 'border-orange-500 bg-orange-50 text-orange-800' : 'border-gray-200 dark:border-gray-700 hover:border-orange-400'}`
 const sep = <span className="h-4 w-px bg-gray-200 dark:bg-gray-700" />
@@ -66,7 +67,7 @@ function OpcoesTema() {
     return (
       <span className="flex flex-wrap items-center gap-2" data-opcoes-texto>
         <b className="text-[11px] text-gray-700 dark:text-gray-200">{variavel === 'ARROBA' ? '@' : variavel}</b>
-        <label className="flex items-center gap-1 text-[11px] text-gray-500">Cor <input type="color" value={estilo.color} onChange={e => mudar('Cor do texto', x => { x.color = e.target.value }, 'cor')} className="h-5 w-6" data-opcao="texto-cor" /></label>
+        <label className="flex items-center gap-1 text-[11px] text-gray-500">Cor <CorComPaleta value={estilo.color} onChange={cor => mudar('Cor do texto', x => { x.color = cor }, 'cor')} className="h-5 w-6" data-opcao="texto-cor" /></label>
         {sep}
         {([['left', 'Esq.'], ['center', 'Centro'], ['right', 'Dir.']] as const).map(([v, r]) => <button key={v} className={b(estilo.align === v)} onClick={() => mudar('Alinhamento', e => { e.align = v })} data-opcao-alinhar={v}>{r}</button>)}
         {sep}
@@ -92,7 +93,7 @@ function OpcoesTema() {
         {sep}
         <button className={b(m.cornerMm === 0)} onClick={() => mm({ cornerMm: 0 }, 'Cantos vivos')}>Cantos vivos</button>
         <button className={b(m.cornerMm > 0)} onClick={() => mm({ cornerMm: m.cornerMm > 0 ? m.cornerMm : 3 }, 'Cantos arredondados')}>Arredondados</button>
-        <label className="flex items-center gap-1 text-[11px] text-gray-500">Cor <input type="color" value={m.color} onChange={e => mm({ color: e.target.value }, 'Cor da moldura', 'cor')} className="h-5 w-6" /></label>
+        <label className="flex items-center gap-1 text-[11px] text-gray-500">Cor <CorComPaleta value={m.color} onChange={cor => mm({ color: cor }, 'Cor da moldura', 'cor')} className="h-5 w-6" /></label>
       </span>
     )
   }

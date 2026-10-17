@@ -28,7 +28,7 @@ import { pilhaNoPonto, escolherNaPilha, type ItemPilha } from '@/lib/mae/vinculo
 import { liderDoCenario, arteDaFace, facesDoCenario } from '@/lib/mae/vinculo/cenario'
 import { aplicarEstrutura, estruturaDaPeca, type Estrutura } from '@/lib/mae/medidas/pecas'
 import { useEditor, teclasMae } from './estado'
-import { alternarFaceNaParte, editarCamadaTema, duplicarCamada, alternarNaSelecao, transformarGrupoSelecionado, grupoDaSelecao, transformarSelecao } from './acoesVinculo'
+import { alternarFaceNaParte, soltarNaFace, editarCamadaTema, duplicarCamada, alternarNaSelecao, transformarGrupoSelecionado, grupoDaSelecao, transformarSelecao } from './acoesVinculo'
 import { grupoDe, gruposDo, membrosNaFace } from '@/lib/mae/vinculo/gruposTema'
 import { juntarUltimos } from '@/lib/mae/editor/linhaDoTempo'
 import { infoEmCache } from './arquivosMae'
@@ -175,6 +175,8 @@ export default function CamadaMoldes({ posicoes, escala }: { posicoes: { xMm: nu
     const es = useEditor.getState()
     const faceId = m && local ? faceSemFuroNoPonto(m, local) : null
     if (es.modo === 'tema') {
+      // Lote 21 (item 255): com o PINCEL carregado, clicar numa face aplica o papel/elemento (Alt = só nesta caixa)
+      if (es.pincel && faceId && !ctrl && !usePedidoAberto.getState().ajustar) { soltarNaFace(faceId, local, es.pincel, alt, shift); return }
       // Lote 4 (item 34): Ctrl + clique na FACE soma/tira a parte da seleção (como nas miniaturas)
       const somarParte = () => {
         const p = faceId ? parteDe.get(faceId) : null

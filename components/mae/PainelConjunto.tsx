@@ -19,6 +19,7 @@ import { useEditor } from './estado'
 import { SeletorImagem } from './SeletorImagem'
 import Deslizador from './Deslizador'
 import { sync } from './sincronia'
+import CorComPaleta from './CorComPaleta'
 
 const btn = 'inline-flex items-center gap-1 rounded border border-gray-200 dark:border-gray-700 px-1.5 py-0.5 text-[11px] hover:border-orange-400 disabled:opacity-40'
 const MATERIAIS = ['Dourado', 'Prateado', 'Glitter rosa', 'Glitter dourado', 'Preto', 'Branco', 'Holográfico']
@@ -138,7 +139,7 @@ export function EditorConjunto({ camadaId }: { camadaId: string }) {
                 <input list="mae-materiais" defaultValue={p.material ?? ''} key={`${p.id}:mat:${p.material}`} onBlur={e => { const v = e.target.value.trim(); if (v !== (p.material ?? '')) peca(i, 'Material', x => { x.material = v.slice(0, 40) || undefined }) }} placeholder="Material" className="w-24 rounded border border-gray-200 bg-transparent px-1 py-0.5" data-material-peca />
                 <datalist id="mae-materiais">{MATERIAIS.map(m => <option key={m} value={m} />)}</datalist>
               </>}
-              <input type="color" value={p.cor} onChange={e => peca(i, 'Cor da peça', x => { x.cor = e.target.value }, 'cor')} className="h-5 w-6" title={p.tipo === 'recorte' ? 'Cor do material na arte' : 'Cor da peça'} />
+              <CorComPaleta value={p.cor} onChange={cor => peca(i, 'Cor da peça', x => { x.cor = cor }, 'cor')} className="h-5 w-6" title={p.tipo === 'recorte' ? 'Cor do material na arte' : 'Cor da peça'} />
             </div>
             <div className="flex flex-wrap items-center gap-1">
               <select value={p.imagem ? 'imagem' : p.forma?.kind ?? 'ellipse'} onChange={e => { const v = e.target.value; if (v === 'imagem') setEscolher({ i, o: 'imagem' }); else peca(i, 'Formato da peça', x => { delete x.imagem; x.forma = { kind: v as never, params: { radius: 0.15, sides: v === 'cloud' ? 7 : v === 'polygon' ? 6 : v === 'star' ? 5 : 12, inner: v === 'star' ? 0.5 : v === 'cloud' ? 0.72 : 0.86 } } }) }} className="rounded border border-gray-200 bg-transparent px-1 py-0.5" data-formato-peca>
@@ -176,7 +177,7 @@ export function EditorConjunto({ camadaId }: { camadaId: string }) {
                 {p.moldura && <>
                   <Faixa rotulo="Distância da borda" valor={p.moldura.offsetMm} min={0} max={15} passo={0.1} mm onChange={v => peca(i, 'Distância da moldurinha', x => { if (x.moldura) x.moldura.offsetMm = v }, 'mof')} />
                   <Faixa rotulo="Espessura" valor={p.moldura.widthMm} min={0.1} max={4} passo={0.05} mm onChange={v => peca(i, 'Espessura da moldurinha', x => { if (x.moldura) x.moldura.widthMm = v }, 'mw')} />
-                  <label className="flex items-center gap-1">Cor <input type="color" value={p.moldura.color} onChange={e => peca(i, 'Cor da moldurinha', x => { if (x.moldura) x.moldura.color = e.target.value }, 'mc')} className="h-5 w-6" />
+                  <label className="flex items-center gap-1">Cor <CorComPaleta value={p.moldura.color} onChange={cor => peca(i, 'Cor da moldurinha', x => { if (x.moldura) x.moldura.color = cor }, 'mc')} className="h-5 w-6" />
                     <input type="checkbox" checked={!!p.moldura.dash} onChange={e => peca(i, 'Pesponto', x => { if (x.moldura) x.moldura.dash = e.target.checked ? { onMm: 1.2, offMm: 0.8 } : null })} /> pesponto</label>
                 </>}
               </div>

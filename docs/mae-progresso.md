@@ -3651,3 +3651,30 @@ Doc: `docs/mae-ajustes-lote-22.md`. Contas de teste em produção: teste.somae@u
   - No tema aberto há "+ Adicionar página", que põe páginas na MESMA base, já com papel no tema, e "Trocar arquivo" para cada página.
   - Arquivos: `lib/mae/temasProntos/montar.ts` (`adicionarPaginasNaBase`, `trocarArquivoNaBase`, `ordemDosArquivos`, `folhaParecida`), `lib/mae/exportar/png.ts` (`dpiDaImagem`), `components/mae/PainelTemaPronto.tsx`.
 - **Testes:** `lote23.test.ts` (5 passando), suíte com 750 passando. Harness `ui_mae_lote23` sem falhas: 3 PNG = 3 pranchetas no tamanho real, a 4ª na mesma base, e a base do tema pronto aparece em "Onde entra". No Lote 4, a barra fica dentro da faixa.
+
+## Lote 21 · Fase 2 (17/10/2026) — itens 254 e 255
+- **255 Aplicar papel/elemento sem arrastar:**
+  - **um clique** na miniatura da Biblioteca aplica na parte ativa (ou nas partes selecionadas). Antes era duplo-clique; Shift + clique põe por cima;
+  - **"▾ Aplicar em…"** em cada miniatura, com as partes da base;
+  - **🖌 Pincel:** o papel fica carregado e cada clique numa face da arte aplica (Alt = só nesta caixa). Uma faixa laranja no palco mostra o pincel, com "Soltar (Esc)";
+  - **⤢ Ampliar:** Biblioteca em tela cheia, com busca pelo nome, miniaturas maiores e "Clique aplica em [parte ▾]";
+  - arrastar continua funcionando.
+  - Arquivos: `components/mae/PainelTema.tsx` (Biblioteca), `estado.ts` (`pincel`), `CamadaMoldes.tsx` (clique na face), `EditorMae.tsx` (Esc + `FaixaPincel`).
+- **254 Paleta do tema:**
+  - ao lado de cada seletor de cor do tema há o botão 🎨, que abre os tons que já existem nos papéis, elementos e páginas de tema pronto: de 5 a 8 cores (k-means determinístico, tons quase iguais juntos), cada uma com escura · cor · clara;
+  - recalcula sozinha quando entra papel ou elemento, com cache por arquivo;
+  - vale para:
+    - cor do nome (barra do topo e painel);
+    - cor por letra;
+    - contorno/sombra (efeitos);
+    - faixa;
+    - formas (preenchimento e traçado);
+    - moldurinha;
+    - peças do conjunto;
+    - transição com cor;
+    - cor das abas.
+  - Arquivos: `lib/mae/vinculo/paletaDoTema.ts` (puro), `components/mae/CorComPaleta.tsx`, mais os painéis.
+- **Testes:**
+  - `paletaDoTema.test.ts` (5) e suíte com 755 passando;
+  - `ui_mae_lote23` sem falhas: clique, Aplicar em, pincel, Esc, tela cheia com busca, paleta (rosa → entra o azul → rosa + azul) e clique no tom aplica;
+  - regressão sem falhas nos Lotes 16, 19 e 21. O `ZodError` no console do lote16 já existia antes.

@@ -15,6 +15,7 @@ import { gravar, ler, listar } from '@/lib/mae/biblioteca/arquivos'
 import { MOLDURA_PADRAO, PESPONTO_PADRAO, type ParamsMoldura } from '@/lib/mae/vinculo/moldura'
 import type { DocTema } from '@/lib/mae/schema'
 import { criarMolduraNaParte, useRotuloAlvo } from './acoesVinculo'
+import CorComPaleta from './CorComPaleta'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const ativo = ' !border-orange-500 bg-orange-50 text-orange-800'
@@ -170,7 +171,7 @@ export function EditarMoldura({ layerId }: { layerId: string }) {
         <button className={btn + (c.cornerMm > 0 ? ativo : '')} onClick={() => mudar({ cornerMm: c.cornerMm > 0 ? c.cornerMm : 3 }, 'Cantos arredondados')} data-moldura-cantos="redondos">Arredondados</button>
       </div>
       {c.cornerMm > 0 && <Medida rotulo="Arredondamento" v={c.cornerMm} min={0.5} max={20} passo={0.5} sufixo="mm" attr="raio" onChange={v => mudar({ cornerMm: v }, 'Arredondamento', 'r')} />}
-      <label className="flex items-center gap-1 text-[11px] text-gray-500">Cor <input type="color" value={c.color} onChange={e => mudar({ color: e.target.value }, 'Cor da moldura', 'cor')} className="h-5 w-7" data-moldura="cor" /></label>
+      <label className="flex items-center gap-1 text-[11px] text-gray-500">Cor <CorComPaleta value={c.color} onChange={cor => mudar({ color: cor }, 'Cor da moldura', 'cor')} className="h-5 w-7" data-moldura="cor" /></label>
       <p className="text-[10px] text-gray-400">Degradê, traçado, sombras, brilhos e chanfro: em “Estilos da camada”, logo abaixo.</p>
       <div className="flex items-center gap-1">
         <input value={nomePreset} onChange={e => setNomePreset(e.target.value)} placeholder="Nome do preset" className="flex-1 min-w-0 rounded border border-gray-200 bg-transparent px-1 py-0.5 text-[11px]" data-nome-preset-moldura />
