@@ -120,18 +120,20 @@ export type ResultadoCheckoutMae = { ok: true; link: string; reaproveitado?: boo
  * fatura em aberto). Trial de 7 dias só na PRIMEIRA vez (quem já testou começa pagando).
  */
 export async function criarCheckoutMae(p: { workspaceId: string; ciclo: CicloMae; parcelas?: number; baseUrl: string; metodo?: 'cartao' | 'pix'; oferta?: OfertaMae }): Promise<ResultadoCheckoutMae> {
-  // Plano Alunas VPS (16/10/2026): preço próprio, com validade, uma compra por conta (ver ./alunas.ts)
-  const alunas = p.oferta === OFERTA_ALUNAS
-  const precos = alunas ? precosAlunas() : precosMae()
-  if (!vendaMaeAtiva() || !precos) return { ok: false, erro: 'O Método Mãe ainda não está à venda.', status: 400 }
+  if (!vendaMaeAtiva() || !precosMae()) return { ok: false, erro: 'O Método Mãe ainda não está à venda.', status: 400 }
+  const estado = await estadoMaeDaConta(p.workspaceId)
+  if (estado.moduloMae && estado.origem === 'cortesia') return { ok: false, erro: 'Esta conta já tem o Método Mãe liberado.', status: 400 }
+  const plano: PlanoMaeVenda = await planoDeVenda(p.workspaceId, estado)
+  // Plano Alunas VPS (16/10/2026): preço próprio, com validade, uma compra por conta (ver ./alunas.ts). É para quem
+  // NÃO assina o SOA: a assinante do SOA que vier pelo link entra no preço de assinante (add-on, R$ 39,90) — mais barato.
+  const pedeAlunas = p.oferta === OFERTA_ALUNAS
+  const alunas = pedeAlunas && plano !== 'addon'
+  const precos = (alunas ? precosAlunas() : precosMae())!
   if (alunas && !alunasAberta()) return { ok: false, erro: 'O link do Plano Alunas venceu em 31/10/2026.', status: 400 }
   if (alunas && await jaComprouAlunas(p.workspaceId)) return { ok: false, erro: 'Esta conta já comprou pelo Plano Alunas — o link vale uma compra por conta.', status: 400 }
   const nomeItem = (pl: PlanoMaeVenda, c: CicloMae) => (alunas ? nomeDoItemAlunas(c) : nomeDoItemMae(pl, c))
   const descItem = (pl: PlanoMaeVenda, c: CicloMae, x: { parcelas: number; valorParcela: number; total: number }) => (alunas ? descricaoDoItemAlunas(c, x) : descricaoDoItemMae(pl, c, x))
-  const retorno = alunas ? '/mae/alunas' : '/mae/assinatura'
-  const estado = await estadoMaeDaConta(p.workspaceId)
-  if (estado.moduloMae && estado.origem === 'cortesia') return { ok: false, erro: 'Esta conta já tem o Método Mãe liberado.', status: 400 }
-  const plano: PlanoMaeVenda = await planoDeVenda(p.workspaceId, estado)
+  const retorno = pedeAlunas ? '/mae/alunas' : '/mae/assinatura'
   const atual = await assinaturaMaeDaConta(p.workspaceId)
   if (atual && (atual.status === 'TRIAL' || atual.status === 'ATIVA')) return { ok: false, erro: 'O Método Mãe já está ativo nesta conta.', status: 400 }
   if (atual?.status === 'INADIMPLENTE' && atual.subscriptionId) {

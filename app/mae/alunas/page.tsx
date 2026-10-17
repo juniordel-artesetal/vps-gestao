@@ -4,6 +4,7 @@
 // criarCheckoutMae); a página só mostra. Cada preço vai DIRETO ao pagamento (/mae/pagar?o=alunas…). Fora do Google.
 import type { Metadata } from 'next'
 import { precoAlunas, fimAlunas, alunasAberta } from '@/lib/mae/assinatura/alunas'
+import { precosMae } from '@/lib/mae/assinatura/precos'
 import { calcularParcelamentoAnual } from '@/lib/assinatura/planos'
 import { Cta } from '../SiteMae'
 import ParcelasAlunas from './ParcelasAlunas'
@@ -22,6 +23,8 @@ const pagar = (ciclo: 'mensal' | 'anual', parcelas = 1, pix = false) => `/mae/pa
 export default async function PlanoAlunas({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const q = await searchParams
   const p = precoAlunas(), aberta = alunasAberta(), fim = fimAlunas()
+  // quem já assina o SOA entra no preço de assinante (o add-on) — o servidor aplica sozinho (criarCheckoutMae)
+  const assinante = precosMae()?.addon ?? { mensal: 39.9, anual: 383 }
   const tabela = Array.from({ length: 12 }, (_, k) => calcularParcelamentoAnual(k + 1, p.anual))
   const economia = Math.round((1 - p.anual / (12 * p.mensal)) * 100)
   const validade = fim.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -51,6 +54,9 @@ export default async function PlanoAlunas({ searchParams }: { searchParams: Prom
         ) : (
           <>
             <p className="inline-block rounded-full bg-[#2b211b] px-4 py-1.5 text-sm font-bold text-white" data-alunas-validade>Válido até {validade} · uma compra por conta</p>
+            <p className="rounded-2xl border-2 border-[#fde2cc] bg-white px-4 py-3 text-sm text-[#5b4a3f]" data-alunas-assinante>
+              <b>Lembrete:</b> estes valores são para quem <b>ainda não assina o SOA</b>. Já é assinante do SOA? Para você o Método Mãe sai por <b>{brl(assinante.mensal)}/mês</b> (ou {brl(assinante.anual)}/ano) — é só entrar com a sua conta pelos botões abaixo que o preço de assinante entra sozinho.
+            </p>
             <div className="grid gap-4 sm:grid-cols-2" data-alunas-planos>
               <div className="flex flex-col rounded-3xl border-2 border-[#eadfd6] bg-white p-5">
                 <p className="text-xs font-bold uppercase tracking-wider text-[#9a8677]">Mensal</p>
@@ -74,7 +80,7 @@ export default async function PlanoAlunas({ searchParams }: { searchParams: Prom
             </div>
             <ul className="space-y-1.5 text-sm text-[#5b4a3f]">
               <li>• Pagamento na página segura do Asaas. Sem teste grátis: o acesso libera assim que o pagamento é aprovado.</li>
-              <li>• Ainda não tem conta? Ao clicar, você cria a sua em 1 minuto. Já tem conta no SOA? É só entrar — o Método Mãe soma à sua conta.</li>
+              <li>• Ainda não tem conta? Ao clicar, você cria a sua em 1 minuto. Já assina o SOA? É só entrar — o Método Mãe soma à sua conta pelo preço de assinante ({brl(assinante.mensal)}/mês).</li>
               <li>• O link vale <b>uma compra por conta</b> e só até {validade}.</li>
             </ul>
           </>
