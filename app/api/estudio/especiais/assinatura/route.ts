@@ -1,5 +1,6 @@
 // SOA Design — assinatura das Artes prontas (self-service). Só o webhook de pagamento libera.
 import { NextRequest, NextResponse } from 'next/server'
+import { SOA_DESIGN_DESCONTINUADO, MSG_SOA_DESIGN_DESCONTINUADO } from '@/lib/estudio/descontinuado'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -14,6 +15,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // SOA Design descontinuado (17/10/2026): nada mais é vendido por aqui
+  if (SOA_DESIGN_DESCONTINUADO) return NextResponse.json({ error: MSG_SOA_DESIGN_DESCONTINUADO }, { status: 410 })
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
   if (session.user.role !== 'ADMIN') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })

@@ -127,7 +127,8 @@ export default function ModulosPage() {
     ? { href: '/estudio/mae', label: 'Método Mãe', descricao: 'Artes personalizadas por pedido, edição em massa e lote de impressão.', icon: Sparkles, cor: 'bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400', roles: ['ADMIN'] }
     : maeCard?.venda ? { href: '/mae/assinatura', label: 'Método Mãe', descricao: 'Artes personalizadas por pedido, edição em massa e lote de impressão.', icon: Sparkles, cor: 'bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400', roles: ['ADMIN'], selo: maeCard.mensal ? `Novo · + ${maeCard.mensal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/mês` : 'Novo · Ativar' } : null
   // no lançamento do MAE (venda aberta) o SOA Design sai do Hub
-  const cardEstudio: Modulo | null = maeCard?.venda ? null : estudio?.ativo
+  // SOA Design descontinuado (17/10/2026): nunca mais aparece no hub
+  const cardEstudio: Modulo | null = true || maeCard?.venda ? null : estudio?.ativo
     ? { href: '/estudio', label: 'SOA Design', descricao: 'Artes em massa, editor de imagem e kit de caixas por face.', icon: Sparkles, cor: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles: ['ADMIN'] }
     : estudio?.venda ? { href: '/soa-edition', label: 'SOA Design', descricao: 'Artes personalizadas em lote e kit de caixas por face.', icon: Sparkles, cor: 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400', roles: ['ADMIN'], selo: 'Assinar' } : null
   const modulosVisiveis = [...modulos, ...(cardEstudio ? [cardEstudio] : []), ...(cardMae ? [cardMae] : [])].filter(m => m.roles.includes(role || ''))

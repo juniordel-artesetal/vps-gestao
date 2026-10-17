@@ -332,7 +332,8 @@ export default function Sidebar() {
       label: 'SOA Design',
       roles: ['ADMIN'],
       // Método Mãe (12/10/2026): no lançamento do MAE (venda aberta) o SOA Design é desligado
-      hidden: !moduloEstudio || maeVenda,
+      // SOA Design descontinuado (17/10/2026): some de vez
+      hidden: true || !moduloEstudio || maeVenda,
       items: [
         { href: '/estudio', label: 'Início', icon: WandSparkles },
         { href: '/estudio/artes', label: 'Edição em massa', icon: Layers },
@@ -365,7 +366,7 @@ export default function Sidebar() {
       id: 'estudio-venda',
       label: 'SOA Design',
       roles: ['ADMIN'],
-      hidden: moduloEstudio || !estudioVenda || maeVenda,
+      hidden: true || moduloEstudio || !estudioVenda || maeVenda,
       items: [
         { href: '/soa-edition', label: 'Conhecer e assinar', icon: WandSparkles },
       ],

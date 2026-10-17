@@ -1,6 +1,7 @@
 // SOA Design — comprar pacote(s) de 50 imagens (cobrança AVULSA no Asaas). Devolve o link da
 // fatura; o crédito só entra quando o webhook confirma o pagamento.
 import { NextRequest, NextResponse } from 'next/server'
+import { SOA_DESIGN_DESCONTINUADO, MSG_SOA_DESIGN_DESCONTINUADO } from '@/lib/estudio/descontinuado'
 import { prisma } from '@/lib/prisma'
 import { ctxEstudio } from '@/lib/estudio/ctx'
 import { iniciarCompra } from '@/lib/estudio/compra'
@@ -8,6 +9,8 @@ import { iniciarCompra } from '@/lib/estudio/compra'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
+  // SOA Design descontinuado (17/10/2026): nada mais é vendido por aqui
+  if (SOA_DESIGN_DESCONTINUADO) return NextResponse.json({ error: MSG_SOA_DESIGN_DESCONTINUADO }, { status: 410 })
   const c = await ctxEstudio(); if (!c.ok) return c.resp
   const b = await req.json().catch(() => ({}))
   const [u] = await prisma.$queryRaw`

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { SOA_DESIGN_DESCONTINUADO } from '@/lib/estudio/descontinuado'
 import { getToken } from 'next-auth/jwt'
 import { lancamentoMaeChegou } from '@/lib/mae/assinatura/lancamento'
 
@@ -16,7 +17,8 @@ const AREAS_FORA_DO_MAE = [...AREAS_ARTESA, '/producao', '/compras', '/marketpla
   '/pessoal', '/soa-edition', '/assinatura', '/estudio']
 const foraDoMae = (p: string) => !p.startsWith('/estudio/mae') && AREAS_FORA_DO_MAE.some(a => p === a || p.startsWith(a + '/'))
 // a venda (e o desligamento do SOA Design) só vale a partir do HORÁRIO do lançamento (16/10/2026 20h)
-const vendaMaeAberta = () => String(process.env.MAE_VENDA_ATIVO || '').toLowerCase() === 'on' && lancamentoMaeChegou()
+// SOA Design descontinuado de vez (17/10/2026): o desvio vale sempre, não só com a venda do MAE aberta
+const vendaMaeAberta = () => SOA_DESIGN_DESCONTINUADO || String(process.env.MAE_VENDA_ATIVO || '').toLowerCase() === 'on' && lancamentoMaeChegou()
 
 export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname
@@ -56,8 +58,9 @@ export async function middleware(req: NextRequest) {
   // — o desvio do lançamento (/estudio/* → /estudio/mae) mandava o worker para uma página e o PDF parava de abrir
   // para todo mundo (17/10/2026, caso Lorena/Naty)
   if (foraDoMae(pathname) && !/\.[a-z0-9]{2,5}$/i.test(pathname)) {
-    if (vendaMaeAberta() && (pathname === '/soa-edition' || pathname.startsWith('/soa-edition/') || pathname === '/estudio' || pathname.startsWith('/estudio/'))) {
-      return NextResponse.redirect(new URL(pathname.startsWith('/soa-edition') ? '/mae/assinatura' : '/estudio/mae', req.url))
+    if (vendaMaeAberta() && (pathname === '/soa-edition' || pathname.startsWith('/soa-edition/') || pathname === '/estudio' || pathname.startsWith('/estudio/')
+        || pathname === '/templates-especiais' || pathname.startsWith('/templates-especiais/'))) {
+      return NextResponse.redirect(new URL(pathname.startsWith('/estudio') ? '/estudio/mae' : '/mae/assinatura', req.url))
     }
     const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET })
     if ((token as { soMae?: boolean } | null)?.soMae) {
