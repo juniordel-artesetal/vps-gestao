@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // serviço companheiro do WhatsApp (roda num VPS, fora da Vercel)
+    "servicos/**",
   ]),
 ]);
 

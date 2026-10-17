@@ -188,7 +188,7 @@ async function listarCobrancas(status: 'PENDING' | 'OVERDUE', de: string, ate: s
 export interface Dona { produto: Produto; workspaceId: string; userId: string | null; bloqueado: boolean; emDia?: boolean }
 
 /** Liga as cobranças às contas, em lote (uma consulta por tabela). */
-async function identificar(cs: CobrancaAsaas[], hoje: string): Promise<Map<string, Dona | null>> {
+export async function identificar(cs: CobrancaAsaas[], hoje: string): Promise<Map<string, Dona | null>> {
   const subs = [...new Set(cs.map(c => c.subscription).filter((s): s is string => !!s))]
   const checkouts = [...new Set(cs.flatMap(c => [c.checkoutSession, c.paymentLink]).filter((s): s is string => !!s))]
   const [mae, pes, mkt, soa, soaCk] = await Promise.all([
@@ -254,7 +254,7 @@ async function identificar(cs: CobrancaAsaas[], hoje: string): Promise<Map<strin
 }
 
 /** Destinatária: a usuária do Pessoal (é dela) ou a ADMIN da conta. */
-async function destinataria(d: Dona): Promise<{ nome: string | null; email: string } | null> {
+export async function destinataria(d: Dona): Promise<{ nome: string | null; email: string } | null> {
   const [u] = d.userId
     ? await prisma.$queryRaw<{ nome: string | null; email: string | null }[]>`SELECT "nome", lower("email") AS email FROM "User" WHERE "id" = ${d.userId} AND "ativo" = true LIMIT 1`.catch(() => [])
     : await prisma.$queryRaw<{ nome: string | null; email: string | null }[]>`
@@ -264,7 +264,7 @@ async function destinataria(d: Dona): Promise<{ nome: string | null; email: stri
 
 export const reguaMensalLigada = (env: Record<string, string | undefined> = process.env) => (env.REGUA_MENSAL ?? '').trim().toLowerCase() !== 'off'
 
-const hojeSP = (agora = new Date()) => new Date(agora.getTime() - 3 * 3600_000).toISOString().slice(0, 10)
+export const hojeSP = (agora = new Date()) => new Date(agora.getTime() - 3 * 3600_000).toISOString().slice(0, 10)
 const diasEntre = (de: string, ate: string) => Math.round((Date.parse(ate + 'T12:00:00Z') - Date.parse(de + 'T12:00:00Z')) / 86_400_000)
 
 export interface ResultadoRegua {
