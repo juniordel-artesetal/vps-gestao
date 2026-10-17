@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { X, MessageCircle, Check } from 'lucide-react'
 
-const CHAVE = 'soa_grupo_whatsapp_popup'
+// v2 (17/10/2026): link novo do grupo — quem já tinha entrado no antigo vê de novo
+const CHAVE = 'soa_grupo_whatsapp_popup_v2'
 const DIAS_DEPOIS = 3
 
 export default function GrupoWhatsappPopup() {
@@ -52,7 +53,7 @@ export default function GrupoWhatsappPopup() {
         <div className="bg-gradient-to-br from-emerald-500 to-green-600 px-6 py-5 text-white">
           <p className="text-xs font-semibold uppercase tracking-wider opacity-90">Novidade para assinantes</p>
           <h2 id="grupo-popup-titulo" className="mt-1 flex items-center gap-2 text-2xl font-bold"><MessageCircle className="h-6 w-6" /> Grupo de suporte no WhatsApp</h2>
-          <p className="mt-1 text-sm opacity-95">Um grupo só para assinantes do SOA, para suas respostas chegarem ainda mais rápido.</p>
+          <p className="mt-1 text-sm opacity-95">Um grupo só para assinantes do SOA, para suas respostas chegarem ainda mais rápido. <b>Link novo</b> — se entrou pelo anterior, entre por este.</p>
         </div>
         <div className="space-y-3 px-6 py-5 text-sm text-gray-700 dark:text-gray-200">
           <ul className="space-y-1.5">

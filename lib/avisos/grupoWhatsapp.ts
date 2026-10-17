@@ -8,11 +8,14 @@ import { prisma } from '@/lib/prisma'
 import { tokenOptOut } from '@/lib/reengajamento'
 import { URL_SOA } from '@/lib/baseUrl'
 
-export const LINK_GRUPO_WHATSAPP = 'https://chat.whatsapp.com/LcOOS2ZCpqKIIU2jdgs65u'
+// 17/10/2026: link NOVO do grupo (o de 16/10 foi trocado) — o pop-up, o e-mail e a Sofia avisam de novo
+export const LINK_GRUPO_WHATSAPP = 'https://chat.whatsapp.com/B6Qk1uqU5ZqEb4HxJlX7bb?s=cl&p=i&mlu=4&ilr=4'
+/** Versão do convite: muda quando o link muda (o pop-up e a Sofia voltam a aparecer; o e-mail sai de novo, 1× por conta). */
+export const VERSAO_GRUPO = 2
 export const linkGrupoWhatsapp = (env: Record<string, string | undefined> = process.env) =>
   (env.GRUPO_WHATSAPP_LINK ?? '').trim().startsWith('https://chat.whatsapp.com/') ? env.GRUPO_WHATSAPP_LINK!.trim() : LINK_GRUPO_WHATSAPP
-const TIPO = 'GRUPO_WHATSAPP'
-const DIA = '2026-10-16'
+const TIPO = 'GRUPO_WHATSAPP_2'
+const DIA = '2026-10-17'
 const REMETENTE = 'Equipe SOA <suporte@vps-gestao.com.br>'
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
@@ -24,11 +27,11 @@ export const ehAssinanteAtivaSoa = (w: { ativo: boolean; assinaturaStatus: strin
 export function montarEmailGrupo(nome: string | null, optout: string, link = LINK_GRUPO_WHATSAPP): { assunto: string; html: string } {
   const primeiro = nome ? esc(String(nome).trim().split(/\s+/)[0]) : ''
   return {
-    assunto: 'Novo: grupo de suporte das assinantes do SOA no WhatsApp 💬',
+    assunto: 'Novo link: grupo de suporte das assinantes do SOA no WhatsApp 💬',
     html: `
   <div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:520px;margin:0 auto;color:#1f2937;line-height:1.55">
     <p style="font-size:16px">${primeiro ? `Oi, ${primeiro}!` : 'Oi!'} 💛</p>
-    <p>Temos uma novidade para você que é <b>assinante do SOA</b>: abrimos um <b>grupo de suporte no WhatsApp</b> só para as assinantes.</p>
+    <p>Você que é <b>assinante do SOA</b> tem um <b>grupo de suporte no WhatsApp</b> só para as assinantes — e ele está com um <b>link novo</b>. Se você entrou pelo link anterior, entre de novo por este:</p>
     <ul style="padding-left:18px">
       <li>Suas dúvidas respondidas <b>ainda mais rápido</b>, direto pelo WhatsApp;</li>
       <li>Avisos de novidades e dicas para aproveitar melhor o SOA;</li>

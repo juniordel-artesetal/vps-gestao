@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
-import { Sparkles, X, Send, ImagePlus, Loader2, Compass, ChevronRight, ArrowUpRight, AlertTriangle, PartyPopper } from 'lucide-react'
+import { Sparkles, X, Send, ImagePlus, Loader2, Compass, ChevronRight, ArrowUpRight, AlertTriangle, PartyPopper, MessageCircle } from 'lucide-react'
 import { useSofiaTour } from './SofiaTour'
 
 interface ResultadoItem { id: string; titulo: string; subtitulo?: string; badge?: string; link: string }
@@ -71,7 +71,10 @@ export default function SofiaWidget() {
       const r = await fetch('/api/sofia/alertas')
       if (!r.ok) return
       const d = await r.json()
-      setAlertasLogin(Array.isArray(d.alertas) ? d.alertas : [])
+      // grupo de suporte: quem já entrou (pelo pop-up ou aqui) não vê mais o convite
+      let jaNoGrupo = false
+      try { jaNoGrupo = localStorage.getItem('soa_grupo_whatsapp_popup_v2') === 'feito' } catch { /* ok */ }
+      setAlertasLogin((Array.isArray(d.alertas) ? d.alertas : []).filter((a: AlertaItem) => !(a.tipo === 'grupo_suporte' && jaNoGrupo)))
       setEmailRecente(!!d.emailRecente)
     } catch {}
   }, [])
@@ -268,7 +271,13 @@ function ListaResultados({ itens, verTodos, onIr }: { itens: ResultadoItem[]; ve
 function ListaAlertas({ itens, onIr }: { itens: AlertaItem[]; onIr: () => void }) {
   return (
     <div className="ml-9 space-y-1.5">
-      {itens.map((a, i) => a.tipo === 'loja_pedidos_novos' ? (
+      {itens.map((a, i) => a.tipo === 'grupo_suporte' ? (
+        <a key={i} href={a.link} target="_blank" rel="noopener noreferrer" onClick={() => { try { localStorage.setItem('soa_grupo_whatsapp_popup_v2', 'feito') } catch { /* ok */ } }} className="flex items-center gap-2 bg-green-50 dark:bg-green-900/15 border border-green-200 dark:border-green-800/40 rounded-xl px-3 py-2 hover:border-green-400 transition" data-sofia-grupo>
+          <MessageCircle className="w-4 h-4 text-green-600 flex-shrink-0" />
+          <span className="text-sm text-gray-800 dark:text-gray-100 flex-1">{a.texto}</span>
+          <span className="text-xs font-semibold text-green-700 dark:text-green-300 flex items-center gap-0.5">Entrar no grupo <ChevronRight className="w-3 h-3" /></span>
+        </a>
+      ) : a.tipo === 'loja_pedidos_novos' ? (
         <a key={i} href={a.link} onClick={onIr} className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/15 border border-emerald-200 dark:border-emerald-800/40 rounded-xl px-3 py-2 hover:border-emerald-400 transition group">
           <PartyPopper className="w-4 h-4 text-emerald-600 flex-shrink-0" />
           <span className="text-sm font-medium text-gray-800 dark:text-gray-100 flex-1">{a.texto}</span>

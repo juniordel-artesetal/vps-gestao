@@ -20,7 +20,7 @@ describe('o e-mail', () => {
     expect(r.html).toContain('Oi, Maria!')
     expect(r.html).toContain(`href="${LINK_GRUPO_WHATSAPP}"`); expect(r.html).toContain('Entrar no grupo')
     expect(r.html).toContain('optout')
-    expect(LINK_GRUPO_WHATSAPP).toBe('https://chat.whatsapp.com/LcOOS2ZCpqKIIU2jdgs65u')
+    expect(LINK_GRUPO_WHATSAPP).toBe('https://chat.whatsapp.com/B6Qk1uqU5ZqEb4HxJlX7bb?s=cl&p=i&mlu=4&ilr=4')
   })
   it('o link pode ser trocado pela env (só se for um link de grupo do WhatsApp)', () => {
     expect(linkGrupoWhatsapp({ GRUPO_WHATSAPP_LINK: 'https://chat.whatsapp.com/Outro' })).toBe('https://chat.whatsapp.com/Outro')

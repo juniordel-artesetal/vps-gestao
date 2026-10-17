@@ -13,9 +13,10 @@ import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
 import { sqlFinalizado, workspaceTemExpedicao } from '@/lib/statusPedido'
 import { estadoAvisos } from '@/lib/loja/avisosPedido'
+import { ehAssinanteAtivaSoa, linkGrupoWhatsapp } from '@/lib/avisos/grupoWhatsapp'
 
 export interface Alerta {
-  tipo: 'loja_pedidos_novos' | 'pedidos_atrasados' | 'contas_vencidas' | 'contas_hoje' | 'estoque_baixo'
+  tipo: 'loja_pedidos_novos' | 'pedidos_atrasados' | 'contas_vencidas' | 'contas_hoje' | 'estoque_baixo' | 'grupo_suporte'
   n: number
   texto: string
   link: string
@@ -91,6 +92,19 @@ export async function calcularAlertas(workspaceId: string): Promise<Alerta[]> {
       link: '/precificacao/estoque-materiais',
     })
   } catch (e) { console.error('[SOFIA-ALERTAS] estoque:', (e as Error)?.message) }
+
+  // ── Grupo de suporte das assinantes no WhatsApp (17/10/2026: link novo) — só para assinante ativa do SOA. Some na
+  //    Sofia quando ela clica (o widget lembra no navegador, a mesma marca do pop-up) ──
+  try {
+    const [w] = await prisma.$queryRaw<{ ativo: boolean; assinaturaStatus: string | null; liberacaoManual: boolean; soMae: boolean }[]>`
+      SELECT "ativo", "assinaturaStatus", "liberacaoManual", COALESCE(to_jsonb(w) ->> 'moduloMaePlano', '') = 'standalone' AS "soMae"
+      FROM "Workspace" w WHERE w."id" = ${workspaceId} LIMIT 1`
+    if (w && ehAssinanteAtivaSoa(w)) alertas.push({
+      tipo: 'grupo_suporte', n: 1, prioridade: 5,
+      texto: '💬 Novo link do grupo de suporte das assinantes no WhatsApp — entre para ter respostas mais rápidas',
+      link: linkGrupoWhatsapp(),
+    })
+  } catch (e) { console.error('[SOFIA-ALERTAS] grupo:', (e as Error)?.message) }
 
   return alertas.sort((a, b) => a.prioridade - b.prioridade)
 }
