@@ -129,6 +129,17 @@ describe('criarCheckoutMae', () => {
     const it0 = (chamadas.find(x => x.caminho === '/checkouts')!.corpo!.items as { value: number; name: string }[])[0]
     expect(it0.name).toBe('SOA + Método Mãe · mensal'); expect(it0.value).toBeCloseTo(89.8, 2)
   })
+  it('REGRA DO JÚNIOR: quem JÁ PAGA o SOA nunca entra no pacote (a assinatura não muda) — o MAE é cobrança à parte de R$ 39,90', async () => {
+    soaPaga = true
+    const { criarCheckoutCombo, criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')
+    const r = await criarCheckoutCombo({ workspaceId: 'ws11', ciclo: 'mensal', baseUrl: 'https://x' })
+    expect(r.ok).toBe(false)
+    expect(chamadas.some(x => x.caminho === '/checkouts')).toBe(false)
+    await criarCheckoutMae({ workspaceId: 'ws11', ciclo: 'mensal', baseUrl: 'https://x' })
+    const it0 = (chamadas.find(x => x.caminho === '/checkouts')!.corpo!.items as { value: number; name: string }[])[0]
+    expect(it0.value).toBe(39.9); expect(it0.name).toBe('MAE p/ assinante SOA · mensal')
+    expect(chamadas.some(x => x.metodo === 'DELETE')).toBe(false)
+  })
   it('quem já testou começa pagando hoje (sem 2º trial)', async () => {
     linhaAssinatura = { status: 'CANCELADA', trialUsado: true, valor: 0, ciclo: 'mensal', parcelas: 1, plano: 'addon' }
     const { criarCheckoutMae } = await import('@/lib/mae/assinatura/servidor')

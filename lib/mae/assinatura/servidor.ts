@@ -13,7 +13,7 @@
 import { prisma } from '@/lib/prisma'
 import { chamarAsaas } from '@/lib/pagamento/asaas/client'
 import { OFERTA_ALUNAS, alunasAberta, precosAlunas, nomeDoItemAlunas, descricaoDoItemAlunas, marcaCheckoutAlunas, MARCA_COMPRA_ALUNAS, DIA_MARCA_ALUNAS, type OfertaMae } from './alunas'
-import { PLANO_COMBO, cobrancaCombo, jaPagaSoa, podeEntrarNoPacote, nomeDoItemCombo, descricaoDoItemCombo } from './combo'
+import { PLANO_COMBO, cobrancaCombo, jaPagaSoa, nomeDoItemCombo, descricaoDoItemCombo } from './combo'
 import { encerrarAssinaturasTrocadasPorPixAuto } from '@/lib/pagamento/asaas/pixAutomatico'
 import { criarLinkPixAuto, apagarLinkPixAuto, ehLinkDePagamento, pixAutoLigado } from '@/lib/pagamento/asaas/linkPixAuto'
 import { temAcesso } from '@/lib/assinatura'
@@ -244,12 +244,6 @@ export async function contaJaPagaSoa(ws: string): Promise<boolean> {
     SELECT "assinaturaStatus", "liberacaoManual" FROM "Workspace" WHERE "id" = ${ws} LIMIT 1`.catch(() => [])
   return !!w && jaPagaSoa(w)
 }
-/** O SOA desta conta pode ir para o PACOTE (ver podeEntrarNoPacote: fora só Hotmart ativa e liberação manual). */
-export async function contaPodeEntrarNoPacote(ws: string): Promise<boolean> {
-  const [w] = await prisma.$queryRaw<{ assinaturaStatus: string | null; assinaturaOrigem: string | null; liberacaoManual: boolean | null }[]>`
-    SELECT "assinaturaStatus", "assinaturaOrigem", "liberacaoManual" FROM "Workspace" WHERE "id" = ${ws} LIMIT 1`.catch(() => [])
-  return !!w && podeEntrarNoPacote(w)
-}
 
 /**
  * Checkout do PACOTE (um item só: SOA + Método Mãe). Só para quem ainda NÃO paga o SOA (sem conta, em teste, cortada,
@@ -259,7 +253,8 @@ export async function contaPodeEntrarNoPacote(ws: string): Promise<boolean> {
 export async function criarCheckoutCombo(p: { workspaceId: string; ciclo: CicloMae; parcelas?: number; baseUrl: string; metodo?: 'cartao' | 'pix' }): Promise<ResultadoCheckoutMae> {
   const precos = precosMae()
   if (!vendaMaeAtiva() || !precos) return { ok: false, erro: 'O Método Mãe ainda não está à venda.', status: 400 }
-  if (!(await contaPodeEntrarNoPacote(p.workspaceId))) return { ok: false, erro: 'O seu SOA é cobrado fora do SOA (Hotmart ou liberação manual): o Método Mãe soma à sua assinatura por R$ 39,90/mês.', status: 409 }
+  // quem JÁ PAGA o SOA nunca entra no pacote: a assinatura dela não muda e o MAE é cobrado à parte (R$ 39,90)
+  if (await contaJaPagaSoa(p.workspaceId)) return { ok: false, erro: 'Você já assina o SOA: o Método Mãe é uma cobrança à parte, de R$ 39,90/mês.', status: 409 }
   const estado = await estadoMaeDaConta(p.workspaceId)
   if (estado.moduloMae && estado.origem === 'cortesia') return { ok: false, erro: 'Esta conta já tem o Método Mãe liberado.', status: 400 }
   const atual = await assinaturaMaeDaConta(p.workspaceId)

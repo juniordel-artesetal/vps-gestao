@@ -20,12 +20,10 @@ export function cobrancaCombo(p: PrecosMae, ciclo: CicloMae, parcelas = 1, agora
 /** Quem já PAGA o SOA hoje (assinatura ativa no Asaas/Hotmart ou liberação manual). Puro. */
 export const jaPagaSoa = (w: { assinaturaStatus: string | null; liberacaoManual: boolean | null }) => w.assinaturaStatus === 'ATIVA' || !!w.liberacaoManual
 /**
- * O SOA desta conta pode entrar no PACOTE (uma cobrança só)? Sim, a não ser que o SOA dela seja cobrado FORA daqui:
- * Hotmart ativa (não dá para cancelar aquela cobrança daqui) ou liberação manual do Master. Assinante do Asaas entra no
- * pacote e a assinatura antiga do SOA é encerrada quando o pacote é pago (16/10/2026: "o preço clicado é o cobrado"). Puro.
+ * REGRA DO JÚNIOR (16/10/2026): quem JÁ PAGA o SOA não muda a assinatura — o MAE é uma cobrança NOVA de R$ 39,90
+ * (anual R$ 383). Quem NÃO assina o SOA e quer SOA + MAE paga o PACOTE (R$ 89,80 / R$ 753). Quem escolhe só o MAE e não
+ * assina o SOA fica como sempre (R$ 59,90 / R$ 503).
  */
-export const podeEntrarNoPacote = (w: { assinaturaStatus: string | null; assinaturaOrigem?: string | null; liberacaoManual: boolean | null }) =>
-  !w.liberacaoManual && !(w.assinaturaStatus === 'ATIVA' && w.assinaturaOrigem === 'hotmart')
 
 export const nomeDoItemCombo = (ciclo: CicloMae) => `SOA + Método Mãe · ${ciclo}`.slice(0, 30)
 const brlTxt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }).replace(/ /g, ' ')
