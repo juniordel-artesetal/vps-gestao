@@ -27,6 +27,8 @@ const POR_NOME: Record<string, string> = {
 
 // a ordem importa: "Failed to fetch dynamically imported module" é versão nova, não falta de internet
 const POR_TEXTO: [RegExp, string][] = [
+  // o leitor de PDF (pdf.js) não subiu o worker — antes do "versão nova" abaixo (a mensagem também traz "dynamically imported module")
+  [/fake worker|pdf\.worker/i, 'Não consegui ler este PDF. Tente de novo ou importe o molde em SVG.'],
   [/loading chunk|chunkloaderror|failed to load chunk|failed to fetch dynamically imported module|importing a module script failed/i, 'Saiu uma versão nova do MAE — recarregue a página (seu trabalho está salvo).'],
   [/failed to fetch|networkerror|load failed|network request failed|err_internet_disconnected/i, 'Sem conexão com o servidor — confira a internet e tente de novo.'],
   [/array buffer allocation failed|out of memory|allocation failed|maximum call stack/i, 'A memória do navegador acabou — feche outras abas e tente de novo (ou diminua a qualidade da exportação).'],

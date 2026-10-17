@@ -81,3 +81,11 @@ describe('260 — "a mesma caixa junta" com tema pronto (marca no PDF)', () => {
     expect(unificarModelos(blocos).blocos.map(x => x.modelo)).toEqual(['n:cubo', 'n:cubo'])
   })
 })
+
+import { mensagemDeErro } from '@/lib/mae/erros'
+describe('PDF: worker do leitor (17/10, caso Lorena)', () => {
+  it('o erro do worker vira mensagem em português (e não "versão nova")', () => {
+    const e = new Error('Setting up fake worker failed: "Failed to fetch dynamically imported module: https://www.usesoa.com.br/estudio/pdf.worker.min.mjs".')
+    expect(mensagemDeErro(e)).toBe('Não consegui ler este PDF. Tente de novo ou importe o molde em SVG.')
+  })
+})

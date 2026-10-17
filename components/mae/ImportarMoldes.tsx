@@ -11,6 +11,7 @@ import { analisarArquivo, redimensionarFonte, type FonteMolde } from '@/lib/mae/
 import { pxPorMmDaMedida, UNIDADES_DXF_ESCOLHA } from '@/lib/mae/importacao/unidades'
 import { useBiblioteca } from '@/lib/mae/editor/loja'
 import { importarMoldes, useMoldes, type FonteConfirmada } from './moldesEditor'
+import { mensagemDeErro } from '@/lib/mae/erros'
 
 const num = (s: string) => Number(String(s).replace(',', '.'))
 const fmt = (n: number, c = 1) => (Math.round(n * 10 ** c) / 10 ** c).toLocaleString('pt-BR')
@@ -77,7 +78,7 @@ export default function ImportarMoldes({ arquivos, onFechar }: { arquivos: File[
             })
             void raster
           }
-        } catch (e) { errs.push((e as Error)?.message || `${a.name}: não consegui ler`) }
+        } catch (e) { errs.push(`${a.name}: ${mensagemDeErro(e) || 'não consegui ler'}`) }
       }
       if (vivo) { setItens(out); setErros(errs) }
     })()

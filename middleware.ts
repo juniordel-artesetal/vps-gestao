@@ -52,7 +52,10 @@ export async function middleware(req: NextRequest) {
   // No LANÇAMENTO do MAE (MAE_VENDA_ATIVO=on) o SOA Design é DESLIGADO: as telas dele levam ao MAE (quem assinava
   // virou cortesia do MAE). A conta STANDALONE (token.soMae) só enxerga o MAE. Com a flag OFF e sem conta
   // standalone, nada disto muda o comportamento de hoje.
-  if (foraDoMae(pathname)) {
+  // ARQUIVO ESTÁTICO (public/: o worker do leitor de PDF em /estudio/pdf.worker.min.mjs, imagens…) nunca é redirecionado
+  // — o desvio do lançamento (/estudio/* → /estudio/mae) mandava o worker para uma página e o PDF parava de abrir
+  // para todo mundo (17/10/2026, caso Lorena/Naty)
+  if (foraDoMae(pathname) && !/\.[a-z0-9]{2,5}$/i.test(pathname)) {
     if (vendaMaeAberta() && (pathname === '/soa-edition' || pathname.startsWith('/soa-edition/') || pathname === '/estudio' || pathname.startsWith('/estudio/'))) {
       return NextResponse.redirect(new URL(pathname.startsWith('/soa-edition') ? '/mae/assinatura' : '/estudio/mae', req.url))
     }
