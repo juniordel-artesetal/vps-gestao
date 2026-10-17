@@ -20,6 +20,10 @@ export interface PaginaPronta {
   hMm: number
   /** A imagem da página na Biblioteca (o papel do tema). */
   imagem: ArquivoImagem
+  /** Lote 23 (item 267): o arquivo DESTA página (vários PNG, um por página) — sem isto, o arquivo do tema. */
+  fonte?: ArquivoPronto
+  /** Página do PDF de `fonte` (1 = a primeira). */
+  paginaPdf?: number
 }
 export interface ArquivoPronto { path: string; sha256: string; kind: 'pdf' | 'png' | 'jpg' }
 
@@ -45,21 +49,7 @@ export function montarTemaPronto(o: { nome: string; produto?: string; arquivo: A
     smartArt: { overflowMm: 10 }, artboards: [], molds: [], parts: [], textSlots: [],
     pronto: { path: o.arquivo.path, sha256: o.arquivo.sha256 },
   }
-  const partes: string[] = []
-  o.paginas.forEach((p, i) => {
-    const abId = gid('ab'), mId = gid('m')
-    const nomePg = p.nome.trim().slice(0, 60) || `PÁGINA ${i + 1}`
-    base.artboards.push({ id: abId, widthMm: p.wMm, heightMm: p.hMm, name: nomePg.slice(0, 80) })
-    base.molds.push({
-      id: mId, name: nomePg, artboardId: abId,
-      source: { path: o.arquivo.path, sha256: o.arquivo.sha256, widthMm: p.wMm, heightMm: p.hMm, kind: o.arquivo.kind, ...(o.arquivo.kind === 'pdf' ? { page: i + 1 } : {}) },
-      transform: { xMm: 0, yMm: 0, rotationDeg: 0 },
-      faces: facesParaReceita(mId, [{ poligono: ret(p.wMm, p.hMm), tipos: ['cut', 'cut', 'cut', 'cut'], furo: false }]) as DocTrabalho['molds'][number]['faces'],
-    })
-    const partId = novaParte(base, nomePg)
-    atribuirFace(base, partId, base.molds[i].faces[0].id)
-    partes.push(partId)
-  })
+  const partes = o.paginas.map((p, i) => criarPagina(base, p, i, o.arquivo))
   organizarPranchetas(base, 'grade')
   const face1 = base.molds[0].faces[0].id
   for (const t of TEXTOS_PADRAO) {
@@ -74,6 +64,71 @@ export function montarTemaPronto(o: { nome: string; produto?: string; arquivo: A
 }
 
 export { chaveTema }
+
+/** Uma página do tema pronto na base: prancheta do tamanho dela + "molde" retangular + parte com o nome. Devolve a parte. */
+function criarPagina(base: DocTrabalho, p: PaginaPronta, i: number, arquivo: ArquivoPronto): string {
+  const abId = gid('ab'), mId = gid('m')
+  const nomePg = p.nome.trim().slice(0, 60) || `PÁGINA ${i + 1}`
+  const f = p.fonte ?? arquivo
+  base.artboards.push({ id: abId, widthMm: p.wMm, heightMm: p.hMm, name: nomePg.slice(0, 80) })
+  base.molds.push({
+    id: mId, name: nomePg, artboardId: abId,
+    source: { path: f.path, sha256: f.sha256, widthMm: p.wMm, heightMm: p.hMm, kind: f.kind, ...(f.kind === 'pdf' ? { page: p.paginaPdf ?? (p.fonte ? 1 : i + 1) } : {}) },
+    transform: { xMm: 0, yMm: 0, rotationDeg: 0 },
+    faces: facesParaReceita(mId, [{ poligono: ret(p.wMm, p.hMm), tipos: ['cut', 'cut', 'cut', 'cut'], furo: false }]) as DocTrabalho['molds'][number]['faces'],
+  })
+  const partId = novaParte(base, nomePg)
+  atribuirFace(base, partId, base.molds[base.molds.length - 1].faces[0].id)
+  return partId
+}
+
+/**
+ * Lote 23 (item 267): "+ Adicionar página" num tema pronto que já existe — as páginas novas viram pranchetas NA MESMA
+ * base (nunca base nova). Devolve as partes novas, na ordem, para o tema receber o papel de cada uma.
+ */
+export function adicionarPaginasNaBase(base: DocTrabalho, paginas: PaginaPronta[]): string[] {
+  if (!paginas.length) return []
+  const arq = base.pronto ? { path: base.pronto.path, sha256: base.pronto.sha256, kind: 'png' as const } : paginas[0].fonte!
+  const n0 = base.artboards.length
+  const partes = paginas.map((p, k) => criarPagina(base, { ...p, nome: p.nome.trim() || `PÁGINA ${n0 + k + 1}` }, n0 + k, p.fonte ?? arq))
+  organizarPranchetas(base, 'grade')
+  return partes
+}
+/** O papel das páginas novas no tema (mesma ordem de `adicionarPaginasNaBase`). */
+export function papelDasPaginasNovas(tema: DocTema, partes: string[], paginas: PaginaPronta[]): void {
+  partes.forEach((id, k) => { if (paginas[k]) colocarPapel(tema, id, paginas[k].imagem) })
+}
+
+/** Lote 23 (item 267): "Trocar o arquivo" de uma página — o molde aponta para o arquivo novo. Devolve a parte (o tema troca o papel). */
+export function trocarArquivoNaBase(base: DocTrabalho, artboardId: string, p: Pick<PaginaPronta, 'fonte' | 'paginaPdf'>): string | null {
+  const m = base.molds.find(x => x.artboardId === artboardId)
+  if (!m || !p.fonte) return null
+  m.source = { ...m.source, path: p.fonte.path, sha256: p.fonte.sha256, kind: p.fonte.kind, ...(p.fonte.kind === 'pdf' ? { page: p.paginaPdf ?? 1 } : {}) }
+  if (p.fonte.kind !== 'pdf') delete (m.source as { page?: number }).page
+  const face = m.faces[0]?.id
+  return base.parts.find(pt => pt.instances.some(i => i.faceId === face))?.id ?? null
+}
+
+/** Ordem "humana" dos arquivos (pagina-2 antes de pagina-10). Puro. */
+export const ordemDosArquivos = (paths: string[]) => [...paths].sort((a, b) => (a.split('/').pop() ?? a).localeCompare(b.split('/').pop() ?? b, 'pt-BR', { numeric: true, sensitivity: 'base' }))
+
+/**
+ * O PNG entra no tamanho REAL (pelos dpi do arquivo). Se ele ficar perto de uma folha padrão sem bater com ela (ex.: A4
+ * salvo a 72 dpi vira 793 mm; ou 209 × 296 mm), sugere ajustar à folha. Puro.
+ */
+export function folhaParecida(wMm: number, hMm: number): { nome: string; wMm: number; hMm: number } | null {
+  const FOLHAS: [string, number, number][] = [['A3', 297, 420], ['A4', 210, 297], ['A5', 148, 210], ['A6', 105, 148]]
+  let melhor: { nome: string; wMm: number; hMm: number; dif: number } | null = null
+  for (const [nome, a, b] of FOLHAS) for (const [w, h] of wMm >= hMm ? [[b, a]] : [[a, b]]) {
+    const dif = Math.max(Math.abs(wMm - w) / w, Math.abs(hMm - h) / h)
+    if (!melhor || dif < melhor.dif) melhor = { nome: `${nome} ${w > h ? 'paisagem' : 'retrato'}`, wMm: w, hMm: h, dif }
+  }
+  if (!melhor) return null
+  const proporcao = Math.abs(wMm / hMm - melhor.wMm / melhor.hMm) / (melhor.wMm / melhor.hMm)
+  const exato = Math.abs(wMm - melhor.wMm) <= 1.5 && Math.abs(hMm - melhor.hMm) <= 1.5
+  // mesma proporção da folha (só a escala/dpi errou) ou até 10% de diferença → sugere; já bate → nada
+  return !exato && (melhor.dif <= 0.1 || proporcao <= 0.02) ? { nome: melhor.nome, wMm: melhor.wMm, hMm: melhor.hMm } : null
+}
 
 /** Apelidos guardados na Biblioteca (`Temas/apelidos.json`): chave do campo TEMA → id do tema. */
 export type Apelidos = Record<string, string>

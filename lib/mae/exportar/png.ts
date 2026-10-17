@@ -41,3 +41,32 @@ export function jpgComDpi(jpg: Uint8Array, dpi: number): Uint8Array {
   }
   return out
 }
+
+/**
+ * Lote 23 (item 267): os DPI gravados no arquivo — PNG (chunk pHYs em metros) e JPEG (JFIF em pol. ou cm). Sem a
+ * informação (ou absurda), null: quem chama usa 300. Puro.
+ */
+export function dpiDaImagem(b: Uint8Array): number | null {
+  const ok = (v: number) => (v >= 50 && v <= 2400 ? Math.round(v) : null)
+  if (b.length > 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    let i = 8
+    while (i + 12 <= b.length) {
+      const len = ((b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]) >>> 0
+      const tipo = String.fromCharCode(b[i + 4], b[i + 5], b[i + 6], b[i + 7])
+      if (tipo === 'pHYs' && len >= 9) {
+        const d = i + 8
+        const ppm = ((b[d] << 24) | (b[d + 1] << 16) | (b[d + 2] << 8) | b[d + 3]) >>> 0
+        return b[d + 8] === 1 ? ok(ppm * 0.0254) : null
+      }
+      if (tipo === 'IDAT' || tipo === 'IEND') return null
+      i += 12 + len
+    }
+    return null
+  }
+  if (b.length > 18 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff && b[3] === 0xe0 && String.fromCharCode(b[6], b[7], b[8], b[9]) === 'JFIF') {
+    const un = b[13], x = (b[14] << 8) | b[15]
+    return un === 1 ? ok(x) : un === 2 ? ok(x * 2.54) : null
+  }
+  return null
+}
+

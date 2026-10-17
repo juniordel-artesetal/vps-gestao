@@ -3640,3 +3640,14 @@ Doc: `docs/mae-ajustes-lote-22.md`. Contas de teste em produção: teste.somae@u
   - **265:** `/pedidos` não existe (404 para todo mundo). O SOA usa `/dashboard/pedidos`, que já leva a conta só MAE ao MAE, então não há nada a desviar. No editor de imagem, a conta só MAE não vê mais "Designs antigos (SOA Design)".
   - **Robustez:** o `useSoMae` não derruba a tela fora do provedor de sessão.
   - **Testes:** suíte com 729 passando; a única falha é o teste de tempo instável, que passa sozinho. Harnesses sem falhas: Lotes 7, 14, 16, 18, 19, 21, menus e PNG.
+
+## Lote 23 (17/10/2026) — itens 266 e 267
+- **266:** a barra da prancheta (girar, tamanho, duplicar, excluir, "+ Texto ▾", organizar) passa a ficar DENTRO da faixa laranja do título, numa linha só. Nunca cobre a arte nem o molde. Se a faixa for estreita ou a barra for recolhida ("‹"), ela vira um "⋯" que abre um menu suspenso, para cima ou para baixo conforme o espaço, com os textos rápidos e o organizar. A escolha de recolher fica guardada. "⚠ fora da folha" virou etiqueta na faixa. Os botões rápidos de texto continuam também no painel da esquerda. Arquivo: `components/mae/PranchetasPalco.tsx`.
+- **267:** tema pronto com PNG.
+  - Vários PNG/JPG de uma vez, uma página por arquivo, em ordem pelo nome (1, 2, 10) e reordenáveis arrastando.
+  - Cada página guarda o seu arquivo (`PaginaPronta.fonte`).
+  - O PNG entra no tamanho REAL pelo DPI do arquivo (pHYs/JFIF) e avisa quando está perto de uma folha A3–A6, com "Ajustar à folha".
+  - "Onde entra" lista TODAS as bases, inclusive as criadas por tema pronto, com busca acima de 8.
+  - No tema aberto há "+ Adicionar página", que põe páginas na MESMA base, já com papel no tema, e "Trocar arquivo" para cada página.
+  - Arquivos: `lib/mae/temasProntos/montar.ts` (`adicionarPaginasNaBase`, `trocarArquivoNaBase`, `ordemDosArquivos`, `folhaParecida`), `lib/mae/exportar/png.ts` (`dpiDaImagem`), `components/mae/PainelTemaPronto.tsx`.
+- **Testes:** `lote23.test.ts` (5 passando), suíte com 750 passando. Harness `ui_mae_lote23` sem falhas: 3 PNG = 3 pranchetas no tamanho real, a 4ª na mesma base, e a base do tema pronto aparece em "Onde entra". No Lote 4, a barra fica dentro da faixa.

@@ -11,7 +11,7 @@ import { FileImage, FolderOpen, Upload, Check, Loader2, Type, Save, Move } from 
 import { useMaeDoc, useBiblioteca } from '@/lib/mae/editor/loja'
 import { useMaeTema } from '@/lib/mae/editor/tema'
 import { gravar, ler, listar, sha256 } from '@/lib/mae/biblioteca/arquivos'
-import { montarTemaPronto, nomeDoArquivo, ehArquivoPronto, produtoDoCaminho, casarPaginas, temaProntoNaBase, paginasDoTemaAntigo, pecasDaBase, rotuloDaMedida, proporcaoDiferente, pecaComAMedida, temaProntoNasPecas, type PaginaPronta } from '@/lib/mae/temasProntos/montar'
+import { montarTemaPronto, nomeDoArquivo, ehArquivoPronto, produtoDoCaminho, casarPaginas, temaProntoNaBase, paginasDoTemaAntigo, pecasDaBase, rotuloDaMedida, proporcaoDiferente, pecaComAMedida, temaProntoNasPecas, type PaginaPronta , adicionarPaginasNaBase, papelDasPaginasNovas, trocarArquivoNaBase, ordemDosArquivos, folhaParecida } from '@/lib/mae/temasProntos/montar'
 import type { DocTema, DocTrabalho } from '@/lib/mae/schema'
 import { useEditor } from './estado'
 import { salvarBase, salvarTema, listarBases, listarTemas, renomearTemaNoDisco } from './arquivosMae'
@@ -19,6 +19,8 @@ import { Secao, useLado } from './Funcoes'
 import { confirmarTroca } from './historicoGlobal'
 import { mensagemDeErro } from '@/lib/mae/erros'
 import { normalizarBusca } from '@/lib/mae/editor/buscaTemas'
+import { dpiDaImagem } from '@/lib/mae/exportar/png'
+import { colocarPapel } from '@/lib/mae/vinculo/tema'
 
 const btn = 'inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs font-medium hover:border-orange-400 disabled:opacity-40'
 const inp = 'w-full rounded border border-gray-200 dark:border-gray-700 bg-transparent px-1.5 py-1 text-xs'
@@ -27,7 +29,10 @@ const PX_MM = DPI / 25.4
 const VISTO = 'mae:tema-pronto:visto'
 const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w -]+/g, '').trim().replace(/\s+/g, ' ').slice(0, 60) || 'tema'
 
-interface PaginaEd { nome: string; wMm: number; hMm: number; mini: string }
+// Lote 23 (item 267): `fonte` = o arquivo DESTA página (vários PNG, um por página); `folha` = a folha padrão parecida
+interface PaginaEd { nome: string; wMm: number; hMm: number; mini: string; fonte?: string; folha?: { nome: string; wMm: number; hMm: number } | null }
+const r1 = (v: number) => Math.round(v * 10) / 10
+const tipoImg = (p: string): 'png' | 'jpg' => (/\.png$/i.test(p) ? 'png' : 'jpg')
 
 export default function PainelTemaPronto() {
   return <Secao ids={['pronto']}><Conteudo /></Secao>
@@ -54,10 +59,18 @@ function Conteudo() {
   const [destino, setDestino] = useState<string>('nova')
   const [semMarca, setSemMarca] = useState(false)
   const [migrar, setMigrar] = useState<{ base: string; msg: string | null; rodando: boolean } | null>(null)
+  // Lote 23 (item 267): busca de base (mais de 8), arrastar para ordenar as páginas, adicionar/trocar página
+  const [filtroBase, setFiltroBase] = useState('')
+  const [arrastando, setArrastando] = useState<number | null>(null)
+  const [msgPaginas, setMsgPaginas] = useState<string | null>(null)
+  const inpAdd = useRef<HTMLInputElement>(null)
+  const inpTroca = useRef<HTMLInputElement>(null)
+  const [trocando, setTrocando] = useState<string | null>(null)
   useEffect(() => { if (raiz && liberada && (paginas || migrar) && !bases) void listarBases(raiz).then(l => {
     // a versão mais nova de cada base (Lote 16, item 205: inclusive as de PEÇAS SOB MEDIDA, recém-criadas)
     const porId = new Map<string, { doc: DocTrabalho }>()
-    for (const b of l) if (!b.doc.pronto && b.doc.molds.length && (porId.get(b.doc.id)?.doc.version ?? 0) <= (b.doc.version ?? 0)) porId.set(b.doc.id, b)
+    // Lote 23 (item 267): TODAS as bases — inclusive as criadas por um tema pronto (antes ficavam de fora)
+    for (const b of l) if (b.doc.molds.length && (porId.get(b.doc.id)?.doc.version ?? 0) <= (b.doc.version ?? 0)) porId.set(b.doc.id, b)
     setBases([...porId.values()])
   }).catch(() => setBases([])) }, [raiz, liberada, paginas, migrar, bases])
   const baseDestino = destino !== 'nova' ? bases?.find(b => b.doc.id === destino)?.doc ?? null : null
@@ -101,6 +114,35 @@ function Conteudo() {
   }
   useEffect(() => { if (raiz && liberada) void recarregar() }, [raiz, liberada]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** Lote 23 (item 267): vários PNG/JPG de uma vez — um por página, na ordem do nome do arquivo. */
+  async function subirVarios(fs: File[]) {
+    if (!raiz || !fs.length) return
+    if (fs.length === 1) { await subir(fs[0]); return }
+    if (fs.some(f => /\.pdf$/i.test(f.name))) { setErro('Para várias páginas de uma vez, use PNG ou JPG (um por página). PDF vai um de cada vez.'); return }
+    if (fs.some(f => !ehArquivoPronto(f.name))) { setErro('Use PNG ou JPG.'); return }
+    for (const f of fs) await gravar(raiz, `Temas/${f.name}`, f)
+    await recarregar(); await escolherImagens(fs.map(f => `Temas/${f.name}`))
+  }
+  /** Uma imagem como página: tamanho REAL pelos dpi do arquivo (sem dpi: 300) e a folha padrão parecida. */
+  async function paginaDaImagem(path: string): Promise<PaginaEd> {
+    const f = await ler(raiz!, path)
+    const dpi = dpiDaImagem(new Uint8Array(await f.arrayBuffer())) ?? DPI
+    const bmp = await createImageBitmap(f)
+    const wMm = r1(bmp.width / (dpi / 25.4)), hMm = r1(bmp.height / (dpi / 25.4))
+    bmp.close()
+    return { nome: nomeDoArquivo(path).toUpperCase().slice(0, 60), wMm, hMm, mini: URL.createObjectURL(f), fonte: path, folha: folhaParecida(wMm, hMm) }
+  }
+  async function escolherImagens(paths: string[]) {
+    if (!raiz) return
+    const ord = ordemDosArquivos(paths)
+    setErro(null); setArq(ord[0]); setNomeTema(nomeDoArquivo(ord[0]).slice(0, 120)); setBases(null); setArtesPeca({}); setIgnorarSugestao(false); setProduto(produtoDoCaminho(ord[0])); setPaginas(null); setSalvo(false)
+    try {
+      const out: PaginaEd[] = []
+      for (const [i, p] of ord.entries()) { setRodando(`Lendo a imagem ${i + 1} de ${ord.length}…`); out.push(await paginaDaImagem(p)) }
+      setPaginas(out)
+    } catch (e) { setErro(`Não consegui ler as imagens: ${mensagemDeErro(e)}`); setArq(null) } finally { setRodando(null) }
+  }
+
   async function subir(f: File | undefined) {
     if (!f || !raiz) return
     if (!ehArquivoPronto(f.name)) { setErro('Use PDF, PNG ou JPG.'); return }
@@ -126,10 +168,8 @@ function Conteudo() {
         }
         setPaginas(out)
       } else {
-        const bmp = await createImageBitmap(f)
-        // imagem: 300 dpi (o tamanho em mm pode ser corrigido abaixo)
-        setPaginas([{ nome: nomeDoArquivo(path).toUpperCase().slice(0, 60), wMm: Math.round((bmp.width / PX_MM) * 10) / 10, hMm: Math.round((bmp.height / PX_MM) * 10) / 10, mini: URL.createObjectURL(f) }])
-        bmp.close()
+        // imagem: o tamanho REAL pelos dpi do arquivo (sem dpi, 300); dá para corrigir abaixo (Lote 23, item 267)
+        setPaginas([await paginaDaImagem(path)])
       }
     } catch (e) { setErro(`Não consegui ler "${path.split('/').pop()}": ${mensagemDeErro(e)}`); setArq(null) } finally { setRodando(null) }
   }
@@ -155,8 +195,12 @@ function Conteudo() {
           ps.push({ nome: p.nome, wMm: p.wMm, hMm: p.hMm, imagem: { path, sha256: await sha256(r.blob), aspect: r.w / r.h, nome: p.nome } })
         }
       } else {
-        const p = paginas[0]
-        ps.push({ nome: p.nome, wMm: p.wMm, hMm: p.hMm, imagem: { path: arq, sha256: sha, aspect: p.wMm / p.hMm, nome: p.nome } })
+        // Lote 23 (item 267): cada página com o SEU arquivo (vários PNG), na ordem da lista
+        for (const p of paginas) {
+          const path = p.fonte ?? arq
+          const shaP = path === arq ? sha : await sha256(new Uint8Array(await (await ler(raiz, path)).arrayBuffer()))
+          ps.push({ nome: p.nome, wMm: p.wMm, hMm: p.hMm, imagem: { path, sha256: shaP, aspect: p.wMm / p.hMm, nome: p.nome }, fonte: { path, sha256: shaP, kind: tipoImg(path) } })
+        }
       }
       setRodando('Montando o tema…')
       if (baseDestino && destinoPecas) {
@@ -240,6 +284,64 @@ function Conteudo() {
     await salvarBase(raiz, useMaeDoc.getState().hist.atual); await salvarTema(raiz, useMaeTema.getState().hist!.atual)
     setSalvo(true)
   }
+  /** Lote 23 (item 267): arquivos → páginas prontas (PNG/JPG: uma cada, pelos dpi; PDF: todas as páginas em JPG 300 dpi). */
+  async function paginasDosArquivos(fs: File[], pasta: string): Promise<PaginaPronta[]> {
+    const out: PaginaPronta[] = []
+    for (const f of [...fs].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric: true }))) {
+      if (!ehArquivoPronto(f.name)) throw new Error(`"${f.name}": use PDF, PNG ou JPG.`)
+      if (/\.pdf$/i.test(f.name)) {
+        const { paginasDoPdf, paginaPdfComoImagem } = await import('@/lib/mae/importacao/navegador')
+        const bytes = new Uint8Array(await f.arrayBuffer())
+        const tams = await paginasDoPdf(bytes)
+        for (const [k, t] of tams.entries()) {
+          setRodando(`Preparando ${f.name} — página ${k + 1} de ${tams.length}…`)
+          const r = await paginaPdfComoImagem(bytes, k + 1, PX_MM)
+          const path = `${pasta}/${slug(nomeDoArquivo(f.name))}-${k + 1}.jpg`
+          await gravar(raiz!, path, r.blob)
+          const sh = await sha256(r.blob)
+          const nome = tams.length > 1 ? `${nomeDoArquivo(f.name).toUpperCase()} ${k + 1}`.slice(0, 60) : nomeDoArquivo(f.name).toUpperCase().slice(0, 60)
+          out.push({ nome, wMm: r1(t.larguraMm), hMm: r1(t.alturaMm), imagem: { path, sha256: sh, aspect: r.w / r.h, nome }, fonte: { path, sha256: sh, kind: 'jpg' } })
+        }
+      } else {
+        const path = `${pasta}/${f.name}`
+        await gravar(raiz!, path, f)
+        const pg = await paginaDaImagem(path)
+        let { wMm, hMm } = pg
+        if (pg.folha && (Math.abs(wMm - pg.folha.wMm) > 1.5 || Math.abs(hMm - pg.folha.hMm) > 1.5)
+            && confirm(`"${f.name}": pelos dpi do arquivo a página tem ${wMm} × ${hMm} mm, que não bate com a folha ${pg.folha.nome} (${pg.folha.wMm} × ${pg.folha.hMm} mm). Ajustar à folha?`)) { wMm = pg.folha.wMm; hMm = pg.folha.hMm }
+        const sh = await sha256(new Uint8Array(await f.arrayBuffer()))
+        out.push({ nome: pg.nome, wMm, hMm, imagem: { path, sha256: sh, aspect: wMm / hMm, nome: pg.nome }, fonte: { path, sha256: sh, kind: tipoImg(f.name) } })
+      }
+    }
+    return out
+  }
+  /** "+ Adicionar página": pranchetas novas NA MESMA base (nunca base nova), com o papel de cada uma no tema. */
+  async function adicionarPaginas(fs: File[]) {
+    if (!raiz || !tema || !fs.length) return
+    setErro(null); setMsgPaginas(null)
+    try {
+      const pasta = `Temas/paginas/${tema.produto ? `${slug(tema.produto)} - ` : ''}${slug(tema.name ?? 'tema')}`
+      const novas = await paginasDosArquivos(fs, pasta)
+      let partes: string[] = []
+      useMaeDoc.getState().aplicar(`Adicionar ${novas.length} página(s)`, d => { partes = adicionarPaginasNaBase(d as DocTrabalho, novas) })
+      useMaeTema.getState().aplicar('Papel das páginas novas', t => { papelDasPaginasNovas(t as DocTema, partes, novas) })
+      setSalvo(false); setMsgPaginas(`${novas.length} página(s) adicionada(s) na mesma base — clique em Salvar.`)
+    } catch (e) { setErro(mensagemDeErro(e)) } finally { setRodando(null) }
+  }
+  /** "Trocar arquivo" de uma página: o molde e o papel passam a ser o arquivo novo (a 1ª página, se for PDF). */
+  async function trocarArquivo(artboardId: string, f: File) {
+    if (!raiz || !tema) return
+    setErro(null); setMsgPaginas(null)
+    try {
+      const pasta = `Temas/paginas/${tema.produto ? `${slug(tema.produto)} - ` : ''}${slug(tema.name ?? 'tema')}`
+      const [p] = await paginasDosArquivos([f], pasta)
+      if (!p) return
+      let parte: string | null = null
+      useMaeDoc.getState().aplicar('Trocar o arquivo da página', d => { parte = trocarArquivoNaBase(d as DocTrabalho, artboardId, p) })
+      if (parte) useMaeTema.getState().aplicar('Trocar o papel da página', t => { colocarPapel(t as DocTema, parte!, p.imagem) })
+      setSalvo(false); setMsgPaginas('Arquivo trocado — clique em Salvar.')
+    } catch (e) { setErro(mensagemDeErro(e)) } finally { setRodando(null) }
+  }
   const fecharGuia = () => { setGuia(false); try { localStorage.setItem(VISTO, '1') } catch { /* sem storage */ } }
   const irPara = (modo: 'base' | 'tema', funcao: string, passo?: number) => {
     try { localStorage.setItem(`mae:funcao:${modo}`, funcao) } catch { /* sem storage */ }
@@ -276,7 +378,9 @@ function Conteudo() {
             <button className={btn} onClick={() => inpArq.current?.click()} title="Escolher um PDF/PNG do computador — uma cópia fica em Temas/" data-subir-pronto><Upload className="w-3.5 h-3.5" /> Escolher arquivo…</button>
             <button className={btn} onClick={() => void recarregar()} title="Ler de novo a pasta Temas/" data-atualizar-prontos><FolderOpen className="w-3.5 h-3.5" /> Atualizar</button>
           </div>
-          <input ref={inpArq} type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden" onChange={e => { void subir(e.target.files?.[0]); e.target.value = '' }} data-arquivo-pronto />
+          {/* Lote 23 (item 267): vários PNG de uma vez (um por página); PDF continua um de cada vez */}
+          <input ref={inpArq} type="file" multiple accept=".pdf,.png,.jpg,.jpeg" className="hidden" onChange={e => { void subirVarios(Array.from(e.target.files ?? [])); e.target.value = '' }} data-arquivo-pronto />
+          <p className="text-[10px] text-gray-500">PNG: pode escolher <b>vários de uma vez</b> (um por página, na ordem do nome). PDF: um arquivo com todas as páginas.</p>
           {/* Lote 14 (item 194): MIGRAÇÃO — os temas prontos que ganharam base própria passam para a base escolhida (o antigo
               fica ARQUIVADO, com " (base própria)" no nome — dá para voltar) */}
           {!migrar ? <button className="text-[11px] underline text-gray-500" onClick={() => setMigrar({ base: '', msg: null, rodando: false })} data-abrir-migrar>Juntar os temas prontos antigos numa base…</button> : (
@@ -311,9 +415,10 @@ function Conteudo() {
           </label>
           <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 space-y-1 text-[11px]" data-destino-pronto>
             <p className="font-semibold">Onde entra</p>
+            {(bases?.length ?? 0) > 8 && <input value={filtroBase} onChange={e => setFiltroBase(e.target.value)} placeholder={`Buscar entre ${bases!.length} bases…`} className={inp} data-busca-base-pronto />}
             <select className={inp} value={destino} onChange={e => setDestino(e.target.value)} data-base-pronto>
               <option value="nova">Base nova (uma prancheta por página)</option>
-              {(bases ?? []).map(b => <option key={b.doc.id} value={b.doc.id}>Na base &ldquo;{b.doc.name}&rdquo; — {b.doc.tipo === 'medida' ? 'peças sob medida: uma arte por peça' : 'cada página na caixa de mesmo nome'}</option>)}
+              {(bases ?? []).filter(b => b.doc.id === destino || normalizarBusca(filtroBase).split(' ').filter(Boolean).every(p => normalizarBusca(b.doc.name ?? '').includes(p))).map(b => <option key={b.doc.id} value={b.doc.id}>Na base &ldquo;{b.doc.name}&rdquo; — {b.doc.tipo === 'medida' ? 'peças sob medida: uma arte por peça' : 'cada página na caixa de mesmo nome'}</option>)}
             </select>
             {/* Lote 16 (item 205): nunca cria base nova quando já existe uma base com peça desta medida — pergunta */}
             {sugestao && !ignorarSugestao && (
@@ -403,16 +508,24 @@ function Conteudo() {
             <label className="flex items-center gap-1.5"><input type="checkbox" className="accent-orange-500" checked={semMarca} onChange={e => setSemMarca(e.target.checked)} data-pdf-com-marca /> Este PDF já tem marca de registro <span className="text-gray-400">(o MAE não põe a dele neste tema)</span></label>
           </div>
           <ul className="space-y-1.5 max-h-80 overflow-y-auto">
+            {paginas.length > 1 && <li className="text-[10px] text-gray-500">Arraste as miniaturas para mudar a ordem das páginas.</li>}
             {paginas.map((p, i) => (
-              <li key={i} className="flex gap-2 items-start" data-pagina-pronto={i + 1}>
+              <li key={`${i}:${p.mini}`} className={`flex gap-2 items-start rounded ${arrastando === i ? 'opacity-50' : ''}`} data-pagina-pronto={i + 1}
+                draggable={paginas.length > 1} onDragStart={() => setArrastando(i)} onDragEnd={() => setArrastando(null)} onDragOver={e => { if (arrastando !== null) e.preventDefault() }}
+                onDrop={e => { e.preventDefault(); if (arrastando === null || arrastando === i) return; const de = arrastando; setPaginas(ps => { const n = [...ps!]; const [x] = n.splice(de, 1); n.splice(i, 0, x); return n }); setArrastando(null) }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={p.mini} alt={`Página ${i + 1}`} className="w-14 h-auto rounded border border-gray-200 bg-white" />
                 <div className="flex-1 space-y-0.5">
                   <input value={p.nome} onChange={e => setPaginas(ps => ps!.map((x, j) => j === i ? { ...x, nome: e.target.value } : x))} className={inp} title="Nome desta caixa (aparece nos arquivos por caixa)" data-nome-pagina />
                   <p className="text-[10px] text-gray-500 flex items-center gap-1">
-                    <input inputMode="decimal" defaultValue={String(p.wMm).replace('.', ',')} onBlur={e => { const v = Number(e.target.value.replace(',', '.')); if (v > 0) setPaginas(ps => ps!.map((x, j) => j === i ? { ...x, wMm: v } : x)) }} className="w-14 rounded border border-gray-200 px-1" aria-label="Largura em mm" /> ×
-                    <input inputMode="decimal" defaultValue={String(p.hMm).replace('.', ',')} onBlur={e => { const v = Number(e.target.value.replace(',', '.')); if (v > 0) setPaginas(ps => ps!.map((x, j) => j === i ? { ...x, hMm: v } : x)) }} className="w-14 rounded border border-gray-200 px-1" aria-label="Altura em mm" /> mm
+                    <input key={`w${p.wMm}`} inputMode="decimal" defaultValue={String(p.wMm).replace('.', ',')} onBlur={e => { const v = Number(e.target.value.replace(',', '.')); if (v > 0) setPaginas(ps => ps!.map((x, j) => j === i ? { ...x, wMm: v } : x)) }} className="w-14 rounded border border-gray-200 px-1" aria-label="Largura em mm" /> ×
+                    <input key={`h${p.hMm}`} inputMode="decimal" defaultValue={String(p.hMm).replace('.', ',')} onBlur={e => { const v = Number(e.target.value.replace(',', '.')); if (v > 0) setPaginas(ps => ps!.map((x, j) => j === i ? { ...x, hMm: v } : x)) }} className="w-14 rounded border border-gray-200 px-1" aria-label="Altura em mm" /> mm
                   </p>
+                  {p.folha && (Math.abs(p.wMm - p.folha.wMm) > 1.5 || Math.abs(p.hMm - p.folha.hMm) > 1.5) && (
+                    <p className="text-[10px] text-amber-700" data-aviso-folha-png>⚠ Pelos dpi do arquivo, a página tem {p.wMm} × {p.hMm} mm — não bate com a folha {p.folha.nome} ({p.folha.wMm} × {p.folha.hMm} mm).{' '}
+                      <button className="underline font-semibold" onClick={() => setPaginas(ps => ps!.map((x, j) => (j === i ? { ...x, wMm: p.folha!.wMm, hMm: p.folha!.hMm } : x)))} data-ajustar-folha>Ajustar à folha</button>
+                    </p>
+                  )}
                 </div>
               </li>
             ))}
@@ -435,6 +548,23 @@ function Conteudo() {
             <button className={btn} onClick={() => irPara('base', 'passo-6', 6)} title="Arraste as caixas de NOME, IDADE e HASHTAG na folha; para pôr em outra página, escolha a variável e clique nela" data-pronto-posicao><Move className="w-3.5 h-3.5" /> Posição dos textos</button>
             <button className={btn} onClick={() => irPara('tema', 'texto')} title="Fonte, cor, contorno e sombra do nome, idade e hashtag" data-pronto-estilo><Type className="w-3.5 h-3.5" /> Estilo do texto</button>
             <button className={`${btn} bg-orange-500 text-white !border-orange-500 hover:bg-orange-600`} onClick={() => void salvar()} title="Grava a base e o tema na Biblioteca (e na nuvem)" data-salvar-pronto><Save className="w-3.5 h-3.5" /> Salvar</button>
+          </div>
+          {/* Lote 23 (item 267): completar o tema pronto — mais páginas na MESMA base e trocar o arquivo de uma página */}
+          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-1.5 space-y-1 text-[11px]" data-paginas-do-pronto>
+            <p className="font-semibold">Páginas ({base.artboards.length})</p>
+            <ul className="space-y-0.5">
+              {base.artboards.map((ab, k) => (
+                <li key={ab.id} className="flex items-center gap-1" data-pagina-do-pronto={k + 1}>
+                  <span className="flex-1 truncate">{k + 1}. {ab.name ?? `Página ${k + 1}`} <span className="text-gray-400">({Math.round(ab.widthMm)} × {Math.round(ab.heightMm)} mm)</span></span>
+                  <button className="underline text-gray-600" onClick={() => { setTrocando(ab.id); inpTroca.current?.click() }} data-trocar-arquivo-pagina>Trocar arquivo</button>
+                </li>
+              ))}
+            </ul>
+            <button className={btn} onClick={() => inpAdd.current?.click()} disabled={!!rodando} data-adicionar-pagina-pronto>+ Adicionar página</button>
+            <span className="ml-1 text-[10px] text-gray-500">PNG/JPG (um ou vários) ou PDF — entram na mesma base.</span>
+            {msgPaginas && <p className="text-[11px] text-emerald-700" data-msg-paginas-pronto>{msgPaginas}</p>}
+            <input ref={inpAdd} type="file" multiple accept=".pdf,.png,.jpg,.jpeg" className="hidden" onChange={e => { void adicionarPaginas(Array.from(e.target.files ?? [])); e.target.value = '' }} data-arquivo-adicionar-pagina />
+            <input ref={inpTroca} type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; const id = trocando; setTrocando(null); if (f && id) void trocarArquivo(id, f) }} data-arquivo-trocar-pagina />
           </div>
           {salvo && <p className="text-[11px] text-emerald-700" data-pronto-salvo>Salvo ✓ — gere em “Pedidos e edição em massa”.</p>}
           <button className="text-[11px] underline text-gray-500" onClick={async () => { if (!(await confirmarTroca('tema', 'base'))) return; useMaeTema.getState().carregar(null); setSalvo(false) }} data-novo-pronto>Cadastrar outro tema pronto</button>
